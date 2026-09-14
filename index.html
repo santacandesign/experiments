@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0C2431" />
+<title>Fish Friends — make your fish</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div class="sea"></div>
+<div class="drift" id="drift"></div>
+
+<div class="app">
+
+  <div class="dots" id="dots"><span class="on"></span><span></span><span></span></div>
+
+  <!-- 1 ─────────────────────────────────────────────────────────── face -->
+  <section class="step active" data-step="0">
+    <h1>your face</h1>
+    <p class="sub">line yourself up and snap it</p>
+    <div class="stage">
+      <div class="lens empty" id="lens">
+        <video id="cam" playsinline muted autoplay></video>
+        <canvas id="lensCanvas"></canvas>
+      </div>
+      <p class="note" id="camNote">asking for the camera…</p>
+    </div>
+    <div class="foot">
+      <div class="row" id="snapRow">
+        <button class="btn go" id="shoot" disabled>snap</button>
+        <button class="btn small ghost" id="pickBtn">use a photo</button>
+      </div>
+      <div class="review" id="reviewRow" hidden>
+        <div class="modes wrap" id="captureModeRow"></div>
+        <div class="slider" id="bulgeRow">
+          <label for="eyeBulge">eye bulge</label>
+          <input type="range" id="eyeBulge" min="0" max="100" value="45" />
+          <output id="bulgeOut">45</output>
+        </div>
+        <div class="row">
+          <button class="btn small ghost" id="retake">retake</button>
+          <button class="btn go" id="useFace">use this →</button>
+        </div>
+      </div>
+      <input type="file" id="pick" accept="image/*" capture="user" hidden />
+    </div>
+  </section>
+
+  <!-- 2 ─────────────────────────────────────────────────────────── name -->
+  <section class="step" data-step="1">
+    <h1>name it</h1>
+    <p class="sub">and dial the fish in</p>
+    <div class="stage">
+      <div id="preview"></div>
+      <input class="field" id="name" maxlength="14" placeholder="Bubbles" autocomplete="off" />
+      <div class="swatches" id="swatches"></div>
+      <div class="modes wrap" id="speciesRow"></div>
+      <div class="slider" id="fishRow">
+        <label for="fishiness">fishiness</label>
+        <input type="range" id="fishiness" min="0" max="100" value="65" />
+        <output id="fishOut">65</output>
+      </div>
+    </div>
+    <div class="foot">
+      <div class="row">
+        <button class="btn small ghost" data-back="0">retake face</button>
+        <button class="btn go" id="toVoice" disabled>next</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ────────────────────────────────────────────────────────── voice -->
+  <section class="step" data-step="2">
+    <h1>give it a voice</h1>
+    <p class="sub">hold the button and say something — 5 seconds</p>
+    <div class="stage">
+      <button class="mic" id="mic"><span class="ring"></span><span id="micLabel">hold<br />to talk</span></button>
+      <div class="bar"><i id="bar"></i></div>
+      <p class="note" id="voiceNote">it comes out very bubbly. that is the point.</p>
+      <div class="row" id="afterRec" style="display:none">
+        <button class="btn small" id="hear">hear it</button>
+        <button class="btn small ghost" id="redo">redo</button>
+      </div>
+    </div>
+    <div class="foot">
+      <div class="row">
+        <button class="btn small ghost" data-back="1">back</button>
+        <button class="btn go warm" id="release">into the tank →</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/creatures.js"></script>
+<script src="js/faceparts.js"></script>
+<script type="module" src="js/facerig.mjs"></script>
+<script src="js/create.js"></script>
+</body>
+</html>
