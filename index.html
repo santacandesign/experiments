@@ -36,11 +36,15 @@
         <button class="btn small ghost" id="pickBtn">use a photo</button>
       </div>
       <div class="review" id="reviewRow" hidden>
-        <div class="modes wrap" id="captureModeRow"></div>
         <div class="slider" id="bulgeRow">
           <label for="eyeBulge">eye bulge</label>
           <input type="range" id="eyeBulge" min="0" max="100" value="45" />
           <output id="bulgeOut">45</output>
+        </div>
+        <div class="slider" id="eyeSizeRow">
+          <label for="eyeSize">eye size</label>
+          <input type="range" id="eyeSize" min="50" max="150" value="100" />
+          <output id="eyeSizeOut">100</output>
         </div>
         <div class="row">
           <button class="btn small ghost" id="retake">retake</button>

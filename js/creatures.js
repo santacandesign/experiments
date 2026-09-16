@@ -13,7 +13,7 @@
 
 const Creatures = (() => {
 
-  const ORDER = ['fish', 'deep', 'tiny', 'seahorse', 'starfish', 'whale'];
+  const ORDER = ['fish', 'deep', 'tiny', 'seahorse', 'starfish', 'whale', 'manta', 'shark'];
 
   const SPECIES = {
     fish:     { label: 'fish',     aspect: 0.70, sizeMul: 1.00, flips: true,  spins: false, speed: 1.00,
@@ -29,7 +29,11 @@ const Creatures = (() => {
     starfish: { label: 'starfish', aspect: 1.00, sizeMul: 0.80, flips: false, spins: true,  speed: 0.30,
                 motion: 'crawl',    beat: 0.00, pattern: 'dots',    eye: { x: 0.02, y: 0.00,  d: 0.34 } },
     whale:    { label: 'whale',    aspect: 0.60, sizeMul: 1.50, flips: true,  spins: false, speed: 0.48,
-                motion: 'cruise',   beat: 0.045, pattern: 'belly',  eye: { x: 0.30, y: 0.02,  d: 0.13 } }
+                motion: 'cruise',   beat: 0.045, pattern: 'belly',  eye: { x: 0.30, y: 0.02,  d: 0.13 } },
+    manta:    { label: 'manta',    aspect: 0.78, sizeMul: 1.45, flips: true,  spins: false, speed: 0.55,
+                motion: 'cruise',   beat: 0.06, pattern: 'belly',   eye: { x: 0.24, y: -0.06, d: 0.12 } },
+    shark:    { label: 'shark',    aspect: 0.44, sizeMul: 1.35, flips: true,  spins: false, speed: 1.00,
+                motion: 'cruise',   beat: 0.10, pattern: 'belly',   eye: { x: 0.32, y: -0.05, d: 0.11 } }
   };
 
   const get = id => SPECIES[id] || SPECIES.fish;
@@ -125,6 +129,33 @@ const Creatures = (() => {
       ctx.bezierCurveTo(-w * 0.42, -h * 0.16, -w * 0.44, -h * 0.06, -w * 0.50, -h * 0.02);
       ctx.bezierCurveTo(-w * 0.44,  h * 0.10, -w * 0.34,  h * 0.22, -w * 0.16,  h * 0.34);
       ctx.bezierCurveTo(w * 0.10,  h * 0.50,  w * 0.42,  h * 0.34,  w * 0.50,  h * 0.06);
+      ctx.closePath();
+      return;
+    }
+
+    if (f.species === 'shark') {
+      /* a torpedo with a pointed snout at +x, tapering to a slim tail wrist */
+      ctx.beginPath();
+      ctx.moveTo(w * 0.52,  h * 0.04);                                    // snout tip
+      ctx.bezierCurveTo(w * 0.34, -h * 0.34,  w * 0.02, -h * 0.42, -w * 0.30, -h * 0.22); // back
+      ctx.bezierCurveTo(-w * 0.40, -h * 0.16, -w * 0.44, -h * 0.10, -w * 0.46, -h * 0.03); // to wrist top
+      ctx.bezierCurveTo(-w * 0.42,  h * 0.06, -w * 0.28,  h * 0.22, -w * 0.04,  h * 0.30); // belly rear
+      ctx.bezierCurveTo(w * 0.20,  h * 0.40,  w * 0.42,  h * 0.24,  w * 0.52,  h * 0.04); // belly to snout
+      ctx.closePath();
+      return;
+    }
+
+    if (f.species === 'manta') {
+      /* top-down glider: a swept diamond, its wingtips flapping slowly. The two
+         "wings" are up/down here, and the head points +x. */
+      const flap = Math.sin(frameCount * (f.wagSpeed || 0.06) + (f.phase || 0)) * h * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.46, 0);                                            // head tip
+      ctx.bezierCurveTo(w * 0.30, -h * 0.16,  w * 0.06, -h * 0.24, -w * 0.14, -h * 0.50 - flap); // to top wingtip
+      ctx.bezierCurveTo(-w * 0.26, -h * 0.56 - flap, -w * 0.34, -h * 0.40, -w * 0.34, -h * 0.16); // wingtip curl
+      ctx.bezierCurveTo(-w * 0.40, -h * 0.05, -w * 0.40,  h * 0.05, -w * 0.34,  h * 0.16); // rear waist
+      ctx.bezierCurveTo(-w * 0.34,  h * 0.40, -w * 0.26,  h * 0.56 + flap, -w * 0.14,  h * 0.50 + flap); // bottom wingtip
+      ctx.bezierCurveTo(w * 0.06,  h * 0.24,  w * 0.30,  h * 0.16,  w * 0.46, 0);         // back to head
       ctx.closePath();
       return;
     }
@@ -389,6 +420,39 @@ const Creatures = (() => {
 
     if (f.species === 'seahorse') { seahorseBehind(ctx, f, w, wag); return; }
 
+    if (f.species === 'shark') {
+      // heterocercal tail: a tall upper lobe, a short lower one
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.44, -h * 0.04);
+      ctx.lineTo(-w * 0.74, -h * 0.70 + wag);        // upper lobe tip
+      ctx.lineTo(-w * 0.56, -h * 0.06 + wag);        // notch
+      ctx.lineTo(-w * 0.66,  h * 0.34 + wag);        // lower lobe tip
+      ctx.lineTo(-w * 0.44,  h * 0.06);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // tall dorsal fin on the back
+      tri([w * 0.04, -h * 0.34], [-w * 0.10, -h * 0.94], [-w * 0.18, -h * 0.30]);
+      // pectoral fin low at the front
+      tri([w * 0.16, h * 0.14], [w * 0.00, h * 0.62], [w * 0.28, h * 0.24]);
+      // small second dorsal, near the tail
+      tri([-w * 0.24, -h * 0.24], [-w * 0.32, -h * 0.52], [-w * 0.36, -h * 0.22]);
+      return;
+    }
+
+    if (f.species === 'manta') {
+      // long whip tail trailing behind
+      ctx.strokeStyle = lineOf(f);
+      ctx.lineWidth = Math.max(1, f.line * 1.4);
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.32, 0);
+      ctx.quadraticCurveTo(-w * 0.58, h * 0.04 + wag * 0.4, -w * 0.88, h * 0.10 + wag);
+      ctx.stroke();
+      ctx.lineWidth = f.line;
+      // two cephalic fins reaching forward off the head
+      tri([w * 0.40, -h * 0.06], [w * 0.62, -h * 0.16], [w * 0.42,  h * 0.02]);
+      tri([w * 0.40,  h * 0.06], [w * 0.62,  h * 0.16], [w * 0.42, -h * 0.02]);
+      return;
+    }
+
     if (f.species === 'long') {
       const ln = longSpine(w, f.wave);
       const last = ln[ln.length - 1], prev = ln[ln.length - 4];
@@ -446,7 +510,8 @@ const Creatures = (() => {
     ctx.lineWidth = Math.max(0.35, f.line * 0.55);
     ctx.globalAlpha = 0.55;
 
-    if (f.species !== 'starfish' && f.species !== 'whale' && f.species !== 'long') {
+    if (f.species !== 'starfish' && f.species !== 'whale' && f.species !== 'long'
+        && f.species !== 'shark' && f.species !== 'manta') {
       const tailBack = 0.80;
       for (let i = 1; i <= 3; i++) {
         const t = i / 4;
@@ -474,7 +539,16 @@ const Creatures = (() => {
       ctx.moveTo(w * 0.06, h * 0.18);
       ctx.bezierCurveTo(w * 0.02, h * 0.42, -w * 0.18, h * 0.46, -w * 0.20, h * 0.30);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-    } else if (f.species !== 'starfish') {
+    } else if (f.species === 'shark') {
+      // five raked gill slits behind the head
+      for (let i = 0; i < 5; i++) {
+        const gx = w * (0.16 - i * 0.045);
+        ctx.beginPath();
+        ctx.moveTo(gx, -h * 0.22);
+        ctx.quadraticCurveTo(gx - w * 0.03, 0, gx, h * 0.20);
+        ctx.stroke();
+      }
+    } else if (f.species !== 'starfish' && f.species !== 'manta') {
       // gill arc
       const gx = -w * 0.02, gy = 0, gh = h * 0.32;
       ctx.beginPath();

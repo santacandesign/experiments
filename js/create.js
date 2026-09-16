@@ -64,6 +64,8 @@ const reviewRow = document.getElementById('reviewRow');
 const bulgeRow  = document.getElementById('bulgeRow');
 const bulgeIn   = document.getElementById('eyeBulge');
 const bulgeOut  = document.getElementById('bulgeOut');
+const sizeIn    = document.getElementById('eyeSize');
+const sizeOut   = document.getElementById('eyeSizeOut');
 
 const LIVE = 260;   // the viewfinder canvas
 const BAKE = 460;   // the face crop the fragments are cut from
@@ -76,8 +78,9 @@ const lensCtx = lensCv.getContext('2d');
 let liveOn = false, liveLandmarks = null, lastDetect = 0, lastSeen = 0, noteState = '';
 let shotA = null;                    // anchors of the captured face
 let parts = null;                    // { right: {eye,brow,lips}, left: {...} }
-let reviewOn = false;                // the snap review (mode + eye bulge) is showing
+let reviewOn = false;                // the snap review (eye bulge + eye size) is showing
 let eyeBulge = +bulgeIn.value / 100; // how far the eyes swell in the whole-face cut
+let eyeSize  = +sizeIn.value / 100;  // how large the eye lenses are drawn (0.5..1.5)
 
 document.getElementById('pickBtn').addEventListener('click', () => pick.click());
 
@@ -204,35 +207,23 @@ function updateNote(rig, seen) {
    every time a control moves, which is why the controls live next to the fish. */
 function rebake() {
   if (!shotA) { parts = null; return; }
-  parts = captureMode === 'face'
-    ? { face: FaceParts.bake(bake, shotA, { fish: fishiness, mode: 'face', eyeBulge }).face }
-    : {
-        right: FaceParts.bake(bake, shotA, { fish: fishiness, side: 'right' }),
-        left:  FaceParts.bake(bake, shotA, { fish: fishiness, side: 'left'  })
-      };
+  parts = { face: FaceParts.bake(bake, shotA, { fish: fishiness, mode: 'face', eyeBulge, eyeSize }).face };
   previewFish.species = species;
 }
 
-/* Redraw the just-snapped face inside the lens: the whole-face patch (with the
-   eye bulge you're dialling) for 'whole face', or the raw crop for 'just eyes'.
-   Only meaningful while the snap review is up. */
+/* Redraw the just-snapped whole-face patch (with the eye bulge and eye size
+   you're dialling) inside the lens. Only meaningful while the review is up. */
 function renderReview() {
   lensCtx.clearRect(0, 0, LIVE, LIVE);
-  if (captureMode === 'face' && parts && parts.face) {
-    lensCtx.drawImage(parts.face, 0, 0, LIVE, LIVE);
-  } else {
-    lensCtx.drawImage(bake, 0, 0, LIVE, LIVE);
-  }
+  if (parts && parts.face) lensCtx.drawImage(parts.face, 0, 0, LIVE, LIVE);
+  else                     lensCtx.drawImage(bake, 0, 0, LIVE, LIVE);
 }
 
-/* Called by the snap-step controls (mode toggle, eye-bulge dial): re-cut the
-   fragments and, while the review is up, repaint the lens. */
+/* Called by the snap-step dials (eye bulge, eye size): re-cut the face patch
+   and, while the review is up, repaint the lens. */
 function onSnapControlChange() {
   rebake();
-  if (reviewOn) {
-    bulgeRow.hidden = captureMode !== 'face';   // bulge only matters for the whole face
-    renderReview();
-  }
+  if (reviewOn) renderReview();
 }
 
 function captured(A) {
@@ -251,7 +242,6 @@ function enterReview() {
   reviewOn = true;
   snapRow.hidden = true;
   reviewRow.hidden = false;
-  bulgeRow.hidden = captureMode !== 'face';
   renderReview();
   noteState = 'review';
   camNote.innerHTML = 'happy with it? <b>use this</b>, or retake';
@@ -293,6 +283,12 @@ bulgeIn.addEventListener('input', () => {
   onSnapControlChange();
 });
 
+sizeIn.addEventListener('input', () => {
+  eyeSize = +sizeIn.value / 100;
+  sizeOut.textContent = sizeIn.value;
+  onSnapControlChange();
+});
+
 pick.addEventListener('change', () => {
   const file = pick.files && pick.files[0];
   if (!file) return;
@@ -319,32 +315,8 @@ const fishOut   = document.getElementById('fishOut');
 
 let fishiness = +fishInput.value / 100;
 let species = 'fish';
-let captureMode = 'eye';   // 'eye' | 'face' — how much of your photo rides the fish
-
-/* eye / whole-face tab switcher — every species can wear either cut, and
-   switching doesn't need a new photo: the capture's landmarks are still
-   around, so it's just a rebake. */
-(function buildCaptureMode() {
-  const wrap = document.getElementById('captureModeRow');
-  if (!wrap) return;
-  const OPTS = [
-    { id: 'eye',  label: 'just eyes' },
-    { id: 'face', label: 'whole face' }
-  ];
-  OPTS.forEach(opt => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'btn small mode' + (opt.id === captureMode ? ' on' : '');
-    b.textContent = opt.label;
-    b.addEventListener('click', () => {
-      if (opt.id === captureMode) return;
-      captureMode = opt.id;
-      wrap.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b));
-      onSnapControlChange();
-    });
-    wrap.appendChild(b);
-  });
-})();
+/* The whole face is the only cut now — your photo always rides the fish as a
+   single face patch, so there's no capture-mode toggle to build. */
 
 nameInput.addEventListener('input', () => {
   draft.name = nameInput.value.trim();
@@ -473,6 +445,7 @@ document.getElementById('release').addEventListener('click', () => {
     species: species,
     fishiness: Math.round(fishiness * 100),
     eyeBulge: Math.round(eyeBulge * 100),
+    eyeSize: Math.round(eyeSize * 100),
     made: Date.now()
   });
   location.href = 'aquarium.html';
@@ -492,7 +465,8 @@ const previewFish = {
    tall. Keeps the preview from poking its head through the top of the card;
    the tank doesn't need this because it has room to spare. */
 const PREVIEW_VREACH = { fish: 0.62, long: 0.50, deep: 1.05, tiny: 0.28,
-                          seahorse: 0.50, starfish: 0.45, whale: 0.48 };
+                          seahorse: 0.50, starfish: 0.45, whale: 0.48,
+                          manta: 0.42, shark: 0.60 };
 
 function setup() {
   const holder = document.getElementById('preview');

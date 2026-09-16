@@ -95,6 +95,7 @@ const FaceParts = (() => {
     const mode = (opts && opts.mode === 'face') ? 'face' : 'eye';
     const scale = (opts && opts.scale) || 1;
     const eyeBulge = clamp(opts && opts.eyeBulge != null ? opts.eyeBulge : 0, 0, 1);
+    const eyeSize = clamp(opts && opts.eyeSize != null ? opts.eyeSize : 1, 0.3, 2);
     if (!A) return null;
 
     const sw = src.width, sh = src.height;
@@ -102,7 +103,7 @@ const FaceParts = (() => {
                   .getImageData(0, 0, sw, sh).data;
     const S = { sd, sw, sh };
 
-    if (mode === 'face') return { face: facePatch(S, A, fish, Math.round(320 * scale), eyeBulge) };
+    if (mode === 'face') return { face: facePatch(S, A, fish, Math.round(320 * scale), eyeBulge, eyeSize) };
 
     const eye = side === 'left' ? A.eyeL : A.eyeR;
     return { eye: eyePatch(S, A, eye, fish, Math.round(240 * scale)) };
@@ -161,20 +162,32 @@ const FaceParts = (() => {
     return cv;
   }
 
+  /* ------------------------------------------------------------------------
+     EYE SPREAD DIAL — how far apart the two eyes are pushed on the whole-face
+     patch. 1.0 leaves them where the photo has them; higher fans them out
+     toward (and past) the sides of the face. This is a pure placement multiply
+     that does NOT stretch the flat face, so crank it as hard as you like — the
+     eye lenses are drawn unclipped and are allowed to spill outside the face
+     silhouette without being cut off. Play with this number.            */
+  const EYE_SPREAD = 1.7;
+  /* ---------------------------------------------------------------------- */
+
   /* The whole face: the flat face, clipped to the face silhouette so only the
      face rides the fish and not the room behind it, with a circular fisheye lens
-     dropped straight over each eye — a magnifier with its own ink ring, the way
-     a goggle bulges the eye behind it. The photo is sampled a touch narrower
-     across (`spread`) so the eyes sit farther apart. Everything outside the
-     lenses is the plain flat face (forehead, nose, mouth, cheeks). `bulge`
-     (0..1) drives how hard the lenses magnify; `fish` adds the sphere shading.
+     dropped over each eye — a magnifier with its own ink ring, the way a goggle
+     bulges the eye behind it. The eyes are fanned apart by EYE_SPREAD and the
+     lenses are composited on top afterwards (not clipped to the face), so they
+     can sit right at the rim or beyond it. `bulge` (0..1) drives how hard the
+     lenses magnify, `size` (0.3..2) how large each lens is drawn, `fish` adds
+     the sphere shading.
 
      The face is clipped to the tracked oval (A.oval) when a real capture
      provides one; a stand-in with no oval falls back to an ellipse on the face
      box. Seam: at a lens rim (rn → 1) the remap factor rn^(k-1) → 1, so the
-     sample point equals the flat-face sample there — the magnified eye blends
-     into the face with no tear, and the ring is drawn on top of that join. */
-  function facePatch(S, A, fish, size, bulge) {
+     sample point equals the flat-face sample there — where the lens overlaps
+     the face it blends in with no tear; where it spills past the face its soft
+     rim just fades out over the fish's body. */
+  function facePatch(S, A, fish, size, bulge, eyeSize) {
     const cv = document.createElement('canvas');
     cv.width = cv.height = size;
     const ctx = cv.getContext('2d');
@@ -184,65 +197,35 @@ const FaceParts = (() => {
     const R = size * 0.46;                             // pixel scale for the mapping
     const c0 = size / 2;
     const c = A.faceC;
-    const spread = 1.12;                               // eyes pushed a little farther apart
     const rY = Math.max(A.faceW, A.faceH) * 0.60;      // vertical reach on the photo
-    const rX = rY / spread;                            // narrower source across → wider apart in the cut
+    const rX = rY;                                     // no across-stretch: spread is a placement move, below
 
-    /* face-space (0..1 on the photo) → patch pixel, and the eyes' pixel centres */
+    /* face-space (0..1 on the photo) → patch pixel */
     const toPx = (u, v) => [c0 + ((u - c.x) / rX) * R, c0 + ((v - c.y) / rY) * R];
+
+    /* eye pixel centres, then fanned outward from the patch centre by EYE_SPREAD
+       (horizontally — this is what pushes them apart without warping the face) */
     const eyes = [A.eyeL, A.eyeR].map(E => {
       const p = toPx(E.x, E.y);
-      return { E, ex: p[0], ey: p[1] };
+      return { E, ex: c0 + (p[0] - c0) * EYE_SPREAD, ey: p[1] };
     });
     const gapPx = Math.hypot(eyes[1].ex - eyes[0].ex, eyes[1].ey - eyes[0].ey);
-    const lensR = gapPx * 0.47;                        // small enough that the two lenses read apart
+    const lensR = gapPx * 0.47 * (eyeSize == null ? 1 : eyeSize);  // eye-size dial scales the lens
     const kBulge = 1 + 0.6 * fish + 2.2 * bulge;       // >1 shrinks source near centre → eye grows
 
-    /* the face silhouette in patch pixels — a real capture clips to the tracked
-       oval (so the room behind you is dropped); a stand-in with no oval falls
-       back to an ellipse on the face box, grown to hold the eye lenses */
+    /* fallback silhouette for a stand-in with no tracked oval */
     const faceAx = (A.faceW * 0.5 / rX) * R, faceAy = (A.faceH * 0.5 / rY) * R;
-    const lensAx = Math.max(Math.abs(eyes[0].ex - c0), Math.abs(eyes[1].ex - c0)) + lensR;
-    const axPx = Math.max(faceAx * 1.05, lensAx * 1.02);
-    const ayPx = Math.max(faceAy * 1.12, lensR * 1.02);
+    const axPx = faceAx * 1.05, ayPx = faceAy * 1.12;
 
+    /* ---- pass 1: the flat face only, clipped to the silhouette ---- */
     for (let py = 0; py < size; py++) {
       for (let px = 0; px < size; px++) {
         const o = (py * size + px) * 4;
         const nx = (px + 0.5 - c0) / R, ny = (py + 0.5 - c0) / R;
-
-        /* inside an eye lens? pick the nearer eye */
-        let lens = null, lr = 1e9;
-        for (const e of eyes) {
-          const dd = Math.hypot(px + 0.5 - e.ex, py + 0.5 - e.ey);
-          if (dd < lensR && dd < lr) { lr = dd; lens = e; }
-        }
-
-        let su, sv, shade = 1, spec = 0;
-        if (lens) {
-          const dx = px + 0.5 - lens.ex, dy = py + 0.5 - lens.ey;
-          const rn = lr / lensR;                       // 0 centre .. 1 rim
-          const m = rn < 1e-5 ? 0 : Math.pow(rn, kBulge) / rn;   // ≤1, →1 at rim
-          su = lens.E.x + (dx / R) * rX * m;
-          sv = lens.E.y + (dy / R) * rY * m;
-          const q = Math.max(0, 1 - rn * rn);
-          shade = (1 - 0.20 * fish) + 0.20 * fish * Math.sqrt(q);
-          const hx = dx / lensR + 0.40, hy = dy / lensR + 0.44;
-          spec = Math.max(0, 1 - (hx * hx + hy * hy) / 0.05) * 60 * (0.35 + 0.65 * fish);
-        } else {
-          su = c.x + nx * rX;                           // flat face, no dome
-          sv = c.y + ny * rY;
-        }
-
-        const col = sample(S, su, sv);
-        d[o]     = clamp(col[0] * shade + spec, 0, 255);
-        d[o + 1] = clamp(col[1] * shade + spec, 0, 255);
-        d[o + 2] = clamp(col[2] * shade + spec, 0, 255);
-        d[o + 3] = 255;                                 // masked to the face below, not here
+        const col = sample(S, c.x + nx * rX, c.y + ny * rY);
+        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
       }
     }
-
-    /* stamp the sampled face, then keep only what's inside the face silhouette */
     const tcv = document.createElement('canvas');
     tcv.width = tcv.height = size;
     tcv.getContext('2d').putImageData(img, 0, 0);
@@ -262,11 +245,15 @@ const FaceParts = (() => {
     ctx.drawImage(tcv, 0, 0);
     ctx.restore();
 
+    /* ---- pass 2: each eye lens, on its own patch, composited unclipped so it
+           may spill past the face edge ---- */
+    for (const e of eyes) ctx.drawImage(eyeLens(S, e, R, rX, rY, lensR, kBulge, fish),
+                                        e.ex - lensR, e.ey - lensR);
+
+    /* ---- ink: a ring round each eye, then the face outline ---- */
     ctx.save();
     ctx.strokeStyle = 'rgba(28,54,88,0.62)';
     ctx.lineJoin = ctx.lineCap = 'round';
-
-    /* a ring around each eye lens */
     ctx.lineWidth = Math.max(1, size * 0.012);
     for (const e of eyes) {
       ctx.beginPath();
@@ -280,11 +267,42 @@ const FaceParts = (() => {
       ctx.closePath();
       ctx.stroke();
     }
-
-    /* and the face outline itself */
     ctx.lineWidth = Math.max(1, size * 0.016);
     ctx.stroke(facePath);
     ctx.restore();
+    return cv;
+  }
+
+  /* One eye lens as a standalone square patch (2*lensR): a fisheye magnifier
+     sampled from the face photo around eye E, sphere-shaded, with a soft rim so
+     it fades out where it overhangs the face rather than cutting a hard circle.
+     Drawn on top of the flat face, so at the rim (rn→1, m→1) it lines up with
+     the plain face beneath and blends seamlessly. */
+  function eyeLens(S, e, R, rX, rY, lensR, kBulge, fish) {
+    const D = Math.max(2, Math.ceil(lensR * 2));
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = D;
+    const img = new ImageData(D, D);
+    const d = img.data;
+    for (let py = 0; py < D; py++) {
+      for (let px = 0; px < D; px++) {
+        const o = (py * D + px) * 4;
+        const dx = px + 0.5 - lensR, dy = py + 0.5 - lensR;
+        const rr = Math.hypot(dx, dy), rn = rr / lensR;
+        if (rn > 1) { d[o + 3] = 0; continue; }
+        const m = rn < 1e-5 ? 0 : Math.pow(rn, kBulge) / rn;   // ≤1, →1 at rim
+        const col = sample(S, e.E.x + (dx / R) * rX * m, e.E.y + (dy / R) * rY * m);
+        const q = Math.max(0, 1 - rn * rn);
+        const shade = (1 - 0.20 * fish) + 0.20 * fish * Math.sqrt(q);
+        const hx = dx / lensR + 0.40, hy = dy / lensR + 0.44;
+        const spec = Math.max(0, 1 - (hx * hx + hy * hy) / 0.05) * 60 * (0.35 + 0.65 * fish);
+        d[o]     = clamp(col[0] * shade + spec, 0, 255);
+        d[o + 1] = clamp(col[1] * shade + spec, 0, 255);
+        d[o + 2] = clamp(col[2] * shade + spec, 0, 255);
+        d[o + 3] = 255 * clamp((1 - rn) * lensR * 1.2, 0, 1);  // soft rim
+      }
+    }
+    cv.getContext('2d').putImageData(img, 0, 0);
     return cv;
   }
 

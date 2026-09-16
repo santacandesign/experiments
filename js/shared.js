@@ -203,9 +203,13 @@ function drawMyFish(f, parts) {
 
   if (parts && parts.face) {
     /* the whole face rides at one fixed size — the eyes are enlarged inside the
-       patch at snap time, so the face itself doesn't grow with fishiness */
+       patch at snap time, so the face itself doesn't grow with fishiness.
+       FACE_COVER controls how much of the body the face patch spans: it's sized
+       off the body's longer dimension so it reaches across the whole front/head
+       rather than sitting as a small badge. Bump toward ~1.3 to cover more. */
+    const FACE_COVER = 1.12;
     const { w, h } = Creatures.dims(f);
-    const d = Math.min(w, h) * 0.83 * (1 + (f.talk || 0) * 0.06);
+    const d = Math.max(w, h) * FACE_COVER * (1 + (f.talk || 0) * 0.06);
     blit(parts.face, e.x, e.y, d);
   } else {
     const set = !parts ? null
