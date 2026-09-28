@@ -241,6 +241,17 @@ h1 {
 .btn.warm { background: var(--orange); }
 .btn.ghost { background: rgba(247,240,228,.72); color: var(--ink); border-color: var(--ink); box-shadow: 0 5px 0 rgba(21,47,94,.55); }
 .btn.small { font-size: 16px; padding: 8px 15px; border-width: 2.5px; box-shadow: 0 3px 0 var(--ink); }
+.btn.icon { font-size: 14px; padding: 7px 12px; }
+
+.hud-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.hud-actions .btn { pointer-events: auto; }
 
 .row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 [hidden] { display: none !important; }

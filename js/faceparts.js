@@ -168,8 +168,17 @@ const FaceParts = (() => {
      toward (and past) the sides of the face. This is a pure placement multiply
      that does NOT stretch the flat face, so crank it as hard as you like — the
      eye lenses are drawn unclipped and are allowed to spill outside the face
-     silhouette without being cut off. Play with this number.            */
-  const EYE_SPREAD = 1.7;
+     silhouette without being cut off.
+
+     It now scales with the eye-size dial: small lenses are left close to their
+     real position (so the flat face's own eyes still line up underneath and
+     show through), while large lenses get fanned further apart so the two
+     domes don't collide. */
+  const EYE_SPREAD_MIN = 1.05, EYE_SPREAD_MAX = 1.7;
+  function eyeSpreadFor(eyeSize) {
+    const t = clamp((eyeSize - 0.3) / (2.0 - 0.3), 0, 1);
+    return EYE_SPREAD_MIN + (EYE_SPREAD_MAX - EYE_SPREAD_MIN) * t;
+  }
   /* ---------------------------------------------------------------------- */
 
   /* The whole face: the flat face, clipped to the face silhouette so only the
@@ -205,9 +214,10 @@ const FaceParts = (() => {
 
     /* eye pixel centres, then fanned outward from the patch centre by EYE_SPREAD
        (horizontally — this is what pushes them apart without warping the face) */
+    const spread = eyeSpreadFor(eyeSize == null ? 1 : eyeSize);
     const eyes = [A.eyeL, A.eyeR].map(E => {
       const p = toPx(E.x, E.y);
-      return { E, ex: c0 + (p[0] - c0) * EYE_SPREAD, ey: p[1] };
+      return { E, ex: c0 + (p[0] - c0) * spread, ey: p[1] };
     });
     const gapPx = Math.hypot(eyes[1].ex - eyes[0].ex, eyes[1].ey - eyes[0].ey);
     const lensR = gapPx * 0.47 * (eyeSize == null ? 1 : eyeSize);  // eye-size dial scales the lens

@@ -42,6 +42,10 @@ const SEA = {
 /* Body colours my fish can be given. */
 const BODY_COLOURS = [PAL.orange, PAL.coral, PAL.yellow, PAL.blush, PAL.teal, PAL.lime];
 
+/* A dead fish loses its owner colour — grey is the "this is nobody now" signal,
+   the inverse of [[fish-friends-colour-rule]]. */
+const DEAD = { col: '#82878A', accent: '#6E7376', line: '#454A4C' };
+
 /* ---------------------------------------------------------------- storage */
 
 const Store = (() => {
@@ -196,7 +200,14 @@ function drawMyFish(f, parts) {
   if (sp.flips) scale(f.dir, 1);
   rotate(f.tilt + (f.spin || 0));
 
+  if (f.lifeState === 'dead') {
+    drawDeadBody(f);
+    pop();
+    return;
+  }
+
   Creatures.draw(f);
+  if (f.fat) drawBellyBulge(f);
 
   const fish = f.fish == null ? 0.7 : f.fish;
   const e = Creatures.eyeSpot(f);
@@ -204,12 +215,14 @@ function drawMyFish(f, parts) {
   if (parts && parts.face) {
     /* the whole face rides at one fixed size — the eyes are enlarged inside the
        patch at snap time, so the face itself doesn't grow with fishiness.
-       FACE_COVER controls how much of the body the face patch spans: it's sized
-       off the body's longer dimension so it reaches across the whole front/head
-       rather than sitting as a small badge. Bump toward ~1.3 to cover more. */
-    const FACE_COVER = 1.12;
-    const { w, h } = Creatures.dims(f);
-    const d = Math.max(w, h) * FACE_COVER * (1 + (f.talk || 0) * 0.06);
+       Sized off the body's own (pre-aspect) width rather than its longer
+       dimension, so a tall or spread-out silhouette (seahorse, starfish)
+       doesn't inflate the face along with it — each species' faceMul (in
+       creatures.js) tunes how much of that width the face actually covers, so
+       the snout, arms, etc. stay visible around it. */
+    const { w } = Creatures.dims(f);
+    const faceMul = sp.faceMul == null ? 1.12 : sp.faceMul;
+    const d = w * faceMul * (1 + (f.talk || 0) * 0.06);
     blit(parts.face, e.x, e.y, d);
   } else {
     const set = !parts ? null
@@ -223,13 +236,43 @@ function drawMyFish(f, parts) {
   pop();
 }
 
+/* A puffed-up belly for a fish that's been fed past the fat threshold — a
+   soft bulge layered on top of the body, in the same colours, so it reads as
+   swollen rather than as a different creature. */
+function drawBellyBulge(f) {
+  const { w, h } = Creatures.dims(f);
+  noStroke();
+  ink(Math.max(0.8, f.line * 0.9), shade(f.col, 0.42));
+  fill(f.col);
+  wobblyBlob(-w * 0.02, h * 0.28, w * 0.62, h * 0.58, f.id + 500, 22, w * 0.02);
+}
+
+/* The fish, dead: its own body drawn in grey instead of its owner's colour,
+   settled where it sank, with the eye replaced by a plain crossed-out dot —
+   no face patch, no eye photo, since neither means anything any more. */
+function drawDeadBody(f) {
+  const oc = f.col, oa = f.accent, ol = f.lineCol;
+  f.col = DEAD.col; f.accent = DEAD.accent; f.lineCol = DEAD.line;
+  Creatures.draw(f);
+  f.col = oc; f.accent = oa; f.lineCol = ol;
+
+  const e = Creatures.eyeSpot(f);
+  noStroke();
+  fill(DEAD.line);
+  ellipse(e.x, e.y, e.d * 0.72, e.d * 0.72);
+  ink(Math.max(1.4, e.d * 0.16), PAL.cream);
+  const r = e.d * 0.36;
+  line(e.x - r, e.y - r, e.x + r, e.y + r);
+  line(e.x - r, e.y + r, e.x + r, e.y - r);
+}
+
 /* Draw a p5.Image or a raw canvas centred at (x, y) at the given width, keeping
    the source's own aspect. p5's image() will not take a bare HTMLCanvasElement,
    hence going through drawingContext — which still honours the p5 transform. */
 function blit(src, x, y, w) {
   if (!src) return;
   const c = src.canvas || src;
-  if (!c || !c.width) return;
+  if (!c || !c.width || !c.height) return;
   const h = w * (c.height / c.width);
   drawingContext.drawImage(c, x - w / 2, y - h / 2, w, h);
 }

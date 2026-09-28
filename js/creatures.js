@@ -15,25 +15,31 @@ const Creatures = (() => {
 
   const ORDER = ['fish', 'deep', 'tiny', 'seahorse', 'starfish', 'whale', 'manta', 'shark'];
 
+  /* faceMul: how large the whole-face patch is drawn, as a multiple of the
+     creature's own (pre-sizeMul) width. Kept separate from aspect/sizeMul
+     because a tall or spread-out silhouette (seahorse, starfish) needs a much
+     smaller face than a stocky one to avoid swallowing the whole body — the
+     numbers below are tuned so the face reads as roughly the same size across
+     species while still leaving the snout, arms, etc. visible around it. */
   const SPECIES = {
     fish:     { label: 'fish',     aspect: 0.70, sizeMul: 1.00, flips: true,  spins: false, speed: 1.00,
-                motion: 'burst',    beat: 0.20, pattern: 'stripes', eye: { x: 0.17, y: -0.21, d: 0.28 } },
+                motion: 'burst',    beat: 0.20, pattern: 'stripes', eye: { x: 0.17, y: -0.21, d: 0.28 }, faceMul: 1.12 },
     long:     { label: 'long',     aspect: 0.34, sizeMul: 1.25, flips: true,  spins: false, speed: 1.05,
-                motion: 'undulate', beat: 0.20, pattern: 'spots',   eye: { x: 0.34, y: -0.16, d: 0.17 } },
+                motion: 'undulate', beat: 0.20, pattern: 'spots',   eye: { x: 0.34, y: -0.16, d: 0.17 }, faceMul: 0.95 },
     deep:     { label: 'round',    aspect: 1.05, sizeMul: 0.85, flips: true,  spins: false, speed: 0.70,
-                motion: 'hover',    beat: 0.11, pattern: 'stripes', eye: { x: 0.23, y: -0.17, d: 0.25 } },
+                motion: 'hover',    beat: 0.11, pattern: 'stripes', eye: { x: 0.23, y: -0.17, d: 0.25 }, faceMul: 1.05 },
     tiny:     { label: 'tiny',     aspect: 0.62, sizeMul: 0.50, flips: true,  spins: false, speed: 1.55,
-                motion: 'burst',    beat: 0.34, pattern: 'band',    eye: { x: 0.20, y: -0.18, d: 0.30 } },
+                motion: 'burst',    beat: 0.34, pattern: 'band',    eye: { x: 0.20, y: -0.18, d: 0.30 }, faceMul: 1.12 },
     seahorse: { label: 'seahorse', aspect: 1.90, sizeMul: 0.64, flips: true,  spins: false, speed: 0.32,
-                motion: 'seahorse', beat: 0.62, pattern: 'speckle', eye: { x: 0.13, y: -0.335, d: 0.19 } },
-    starfish: { label: 'starfish', aspect: 1.00, sizeMul: 0.80, flips: false, spins: true,  speed: 0.30,
-                motion: 'crawl',    beat: 0.00, pattern: 'dots',    eye: { x: 0.02, y: 0.00,  d: 0.34 } },
+                motion: 'seahorse', beat: 0.62, pattern: 'speckle', eye: { x: 0.13, y: -0.335, d: 0.19 }, faceMul: 0.42 },
+    starfish: { label: 'starfish', aspect: 1.00, sizeMul: 1.15, flips: false, spins: true,  speed: 0.30,
+                motion: 'crawl',    beat: 0.00, pattern: 'dots',    eye: { x: 0.02, y: 0.00,  d: 0.34 }, faceMul: 0.48 },
     whale:    { label: 'whale',    aspect: 0.60, sizeMul: 1.50, flips: true,  spins: false, speed: 0.48,
-                motion: 'cruise',   beat: 0.045, pattern: 'belly',  eye: { x: 0.30, y: 0.02,  d: 0.13 } },
+                motion: 'cruise',   beat: 0.045, pattern: 'belly',  eye: { x: 0.30, y: 0.02,  d: 0.13 }, faceMul: 0.60 },
     manta:    { label: 'manta',    aspect: 0.78, sizeMul: 1.45, flips: true,  spins: false, speed: 0.55,
-                motion: 'cruise',   beat: 0.06, pattern: 'belly',   eye: { x: 0.24, y: -0.06, d: 0.12 } },
+                motion: 'cruise',   beat: 0.06, pattern: 'belly',   eye: { x: 0.24, y: -0.06, d: 0.12 }, faceMul: 0.60 },
     shark:    { label: 'shark',    aspect: 0.44, sizeMul: 1.35, flips: true,  spins: false, speed: 1.00,
-                motion: 'cruise',   beat: 0.10, pattern: 'belly',   eye: { x: 0.32, y: -0.05, d: 0.11 } }
+                motion: 'cruise',   beat: 0.10, pattern: 'belly',   eye: { x: 0.32, y: -0.05, d: 0.11 }, faceMul: 0.60 }
   };
 
   const get = id => SPECIES[id] || SPECIES.fish;

@@ -18,6 +18,16 @@ const CORAL_TONES = [
 let hintEl, floorY;
 let talkLevel = 0, mouthBubbles = [];
 
+/* ------------------------------------------------------- demo fish states
+   Overfeeding, death and being stuck in seaweed are all app mechanics that
+   don't exist yet — these are hand-triggered stand-ins so the look can be
+   shown before the real feeding/health logic is built. They only ever act
+   on myFish, and each one is an independent override: switching to a new
+   state (button or click) always starts that state fresh. */
+let myLife = { mode: 'normal', fat: false, feedCount: 0, stuckWeed: null };
+let fallingFood = [];
+let dayNight = 'day';
+
 /* --------------------------------------------------------------- setup */
 
 function setup() {
@@ -51,12 +61,39 @@ function setup() {
 
   buildScene();
 
+  dayNight = istDayNight();
+  updateDayNightBtn();
+
   document.getElementById('newFish').addEventListener('click', () => {
     location.href = 'index.html';
+  });
+  document.getElementById('fatBtn').addEventListener('click', setFatPreview);
+  document.getElementById('seaweedBtn').addEventListener('click', stickFish);
+  document.getElementById('deathBtn').addEventListener('click', killFish);
+  document.getElementById('dayNightBtn').addEventListener('click', () => {
+    dayNight = dayNight === 'day' ? 'night' : 'day';
+    updateDayNightBtn();
   });
   ['pointerdown', 'touchstart'].forEach(ev =>
     window.addEventListener(ev, () => Voice.unlock(), { once: true, passive: true })
   );
+}
+
+/* Real time of day, in India — the app has no other timezone concept yet, so
+   this is the one reasonable default rather than something worth a setting. */
+function istDayNight() {
+  let h;
+  try {
+    h = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }), 10) % 24;
+  } catch (e) {
+    h = new Date().getHours();
+  }
+  return (h >= 6 && h < 19) ? 'day' : 'night';
+}
+
+function updateDayNightBtn() {
+  const btn = document.getElementById('dayNightBtn');
+  if (btn) btn.textContent = dayNight === 'day' ? '☀️ day' : '🌙 night';
 }
 
 function windowResized() {
@@ -87,16 +124,19 @@ function buildScene() {
   CAST.forEach((id, i) => {
     const sp = Creatures.get(id);
     const w = short * BASE[id] * (0.85 + Math.random() * 0.32);
+    const col = SEA.skins[i % SEA.skins.length];
     fishes.push(newSwimmer({
       id: 20 + i * 3,
       species: id,
       w,
-      col: SEA.skins[i % SEA.skins.length],
+      col,
       accent: SEA.skins[(i + 2) % SEA.skins.length],
-      lineCol: SEA.ink,
+      /* a shade of the fish's own fill rather than a flat navy ink, so the
+         line recedes into the body instead of drawing a hard sticker edge */
+      lineCol: shade(col, 0.35),
       patCol: SEA.marks,
       blend: true,
-      line: Math.max(0.7, w * 0.009),
+      line: Math.max(0.5, w * 0.0055),
       speed: (0.5 + Math.random() * 0.8) * sp.speed,
       spout: id === 'whale'
     }));
@@ -175,15 +215,20 @@ function buildScene() {
     });
   }
 
-  // seaweed along the floor
+  // seaweed along the floor — a few different kinds of planting, not one
+  // blade repeated: a broad ribbon, a fine grassy tuft, and a leafy fan
   weeds = [];
-  for (let i = 0; i < (width < 480 ? 6 : 9); i++) {
+  const nWeeds = width < 480 ? 7 : 10;
+  const WEED_TYPES = ['ribbon', 'grass', 'fan'];
+  for (let i = 0; i < nWeeds; i++) {
     weeds.push({
       id: 80 + i,
-      x: (width / (width < 480 ? 6 : 9)) * (i + 0.5) + (Math.random() - 0.5) * 40,
-      h: height * (0.09 + Math.random() * 0.10),
-      w: short * (0.034 + Math.random() * 0.026),
+      type: WEED_TYPES[i % WEED_TYPES.length],
+      x: (width / nWeeds) * (i + 0.5) + (Math.random() - 0.5) * 40,
+      h: height * (0.09 + Math.random() * 0.11),
+      w: short * (0.030 + Math.random() * 0.024),
       phase: Math.random() * TWO_PI,
+      blades: 3 + Math.floor(Math.random() * 3),
       /* Planting sits close to the water on purpose. Outlined, saturated weeds
          competed with the creatures for attention; these recede. */
       col: PLANT_TONES[i % PLANT_TONES.length]
@@ -469,6 +514,131 @@ function swim(f) {
   }
 }
 
+/* ------------------------------------------------------- demo state ops */
+
+function setFatPreview() {
+  if (!myFish) return;
+  myLife = { mode: 'normal', fat: true, feedCount: 3, stuckWeed: null };
+}
+
+function killFish() {
+  if (!myFish) return;
+  myLife = { mode: 'dead', fat: false, feedCount: 0, stuckWeed: null };
+  myFish._deadStart = millis();
+  myFish._deadFromY = myFish.y;
+  myFish._deadFromTilt = myFish.tilt;
+  myFish.vx = myFish.vy = 0;
+}
+
+function reviveFish() {
+  myLife = { mode: 'normal', fat: false, feedCount: 0, stuckWeed: null };
+  myFish.tilt = 0;
+  myFish.spin = 0;
+  pickTarget(myFish);
+}
+
+function stickFish() {
+  if (!myFish) return;
+  let best = weeds[0], bestD = Infinity;
+  for (const w of weeds) {
+    const d = Math.abs(w.x - myFish.x);
+    if (d < bestD) { bestD = d; best = w; }
+  }
+  myLife = { mode: 'stuck', fat: false, feedCount: 0, stuckWeed: best };
+  if (best) {
+    myFish.x = best.x;
+    myFish.y = floorY - best.h * 0.55;
+  }
+  myFish.vx = myFish.vy = 0;
+}
+
+function releaseFish() {
+  myLife.mode = 'normal';
+  myLife.stuckWeed = null;
+  pickTarget(myFish);
+}
+
+/* One tap = one pellet, dropped a little above wherever the fish currently
+   is. It's caught almost immediately — this is a feeding gesture, not a
+   physics puzzle — and the bite is what actually advances the count. */
+function feedFish() {
+  if (!myFish || myLife.mode !== 'normal') return;
+  const dm = Creatures.dims(myFish);
+  fallingFood.push({
+    x: myFish.x + (Math.random() - 0.5) * dm.w * 0.25,
+    y: myFish.y - dm.h * 0.9 - 40,
+    vy: 0
+  });
+}
+
+function updateFood() {
+  for (let i = fallingFood.length - 1; i >= 0; i--) {
+    const fd = fallingFood[i];
+    fd.vy += 0.18;
+    fd.y += fd.vy;
+    const targetY = myFish ? myFish.y : fd.y;
+    if (fd.y >= targetY) {
+      fallingFood.splice(i, 1);
+      onBiteComplete();
+    }
+  }
+}
+
+function drawFood() {
+  noStroke();
+  for (const fd of fallingFood) {
+    ink(1.2, PAL.ink);
+    fill('#C9A25C');
+    circle(fd.x, fd.y, 8);
+  }
+}
+
+/* The bite: advance the count, cross the fat and death thresholds, then talk
+   — feeding finishes before the fish has anything to say. */
+function onBiteComplete() {
+  if (!myFish || myLife.mode !== 'normal') return;
+  myLife.feedCount++;
+  if (myLife.feedCount >= 6) { killFish(); return; }
+  if (myLife.feedCount >= 3) myLife.fat = true;
+  spawnMouthBubble(myFish);
+  if (!Voice.isPlaying()) {
+    if (myData && myData.voice) Voice.play();
+    else Voice.bubbleBurst(5, 0.4);
+  }
+}
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+/* Sinking, in place of swim() — straight down onto the floor over ~2s,
+   settling on its side, no more drifting once it lands. */
+function updateDeadFish(f) {
+  const dm = Creatures.dims(f);
+  const t = Math.min(1, (millis() - f._deadStart) / 2000);
+  const e = easeOutCubic(t);
+  f.y = lerp(f._deadFromY, floorY - dm.h * 0.32, e);
+  f.tilt = lerp(f._deadFromTilt, HALF_PI * 0.55, e);
+}
+
+/* Struggling in place, in place of swim(). */
+function updateStuckFish(f) {
+  const w = myLife.stuckWeed;
+  if (!w) return;
+  f.x = w.x + Math.sin(frameCount * 0.5) * 2.5;
+  f.tilt = Math.sin(frameCount * 0.35) * 0.20;
+  f.vx = f.vy = 0;
+}
+
+/* A strand or two drawn over the fish, so it reads as tangled rather than
+   merely parked next to the weeds. */
+function drawStuckWeeds(f) {
+  const w = myLife.stuckWeed;
+  if (!w) return;
+  const dm = Creatures.dims(f);
+  const base = f.y + dm.h * 0.5;
+  plantBlade(f.x - dm.w * 0.12, base, dm.h * 1.3, dm.w * 0.09, w.phase, -0.18, w.col);
+  plantBlade(f.x + dm.w * 0.18, base, dm.h * 1.4, dm.w * 0.08, w.phase + 1.3, 0.22, w.col);
+}
+
 /* -------------------------------------------------------------- bubbles */
 
 function newBubble(scatter) {
@@ -523,12 +693,24 @@ function draw() {
   }
 
   if (myFish) {
-    talkLevel = lerp(talkLevel, Voice.isPlaying() ? Voice.level() : 0, 0.35);
-    myFish.talk = talkLevel;
-    myFish.speed = Voice.isPlaying() ? 0.2 : 0.55;
-    swim(myFish);
+    if (myLife.mode === 'dead') {
+      updateDeadFish(myFish);
+    } else if (myLife.mode === 'stuck') {
+      updateStuckFish(myFish);
+    } else {
+      talkLevel = lerp(talkLevel, Voice.isPlaying() ? Voice.level() : 0, 0.35);
+      myFish.talk = talkLevel;
+      myFish.speed = Voice.isPlaying() ? 0.2 : 0.55;
+      swim(myFish);
+    }
+    myFish.fat = myLife.fat;
+    myFish.lifeState = myLife.mode;
+
+    updateFood();
     drawMyFish(myFish, parts);
-    if (Voice.isPlaying() && frameCount % 7 === 0 && talkLevel > 0.06) spawnMouthBubble(myFish);
+    if (myLife.mode === 'stuck') drawStuckWeeds(myFish);
+    drawFood();
+    if (myLife.mode === 'normal' && Voice.isPlaying() && frameCount % 7 === 0 && talkLevel > 0.06) spawnMouthBubble(myFish);
   }
 
   drawMouthBubbles();
@@ -551,11 +733,15 @@ function vignette() {
   g.fillRect(0, 0, width, height);
 }
 
+/* Sunrays by day, moonlight by night — same shafts, different warmth and
+   strength, so the toggle (and the real clock behind it) actually reads. */
 function drawRays() {
   noStroke();
+  const day = dayNight === 'day';
   for (const r of rays) {
     const off = Math.sin(frameCount * r.sp * 12 + r.ph) * width * 0.03;
-    fill(120, 190, 200, 7);
+    if (day) fill(255, 244, 205, 13);
+    else fill(150, 175, 225, 6);
     beginShape();
     vertex(r.x + off - r.w * 0.18, 0);
     vertex(r.x + off + r.w * 0.18, 0);
@@ -563,6 +749,14 @@ function drawRays() {
     vertex(r.x + off - r.w * 0.75, height * 0.82);
     endShape(CLOSE);
   }
+
+  // a soft pool of light at the surface, warm by day, cool and dim by night
+  const g = drawingContext;
+  const rad = g.createRadialGradient(width * 0.5, -height * 0.05, 10, width * 0.5, height * 0.22, height * 0.55);
+  rad.addColorStop(0, day ? 'rgba(255,244,205,0.12)' : 'rgba(150,170,230,0.07)');
+  rad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rad;
+  g.fillRect(0, 0, width, height);
 }
 
 function drawStars() {
@@ -572,7 +766,7 @@ function drawStars() {
     push();
     translate(s.x, y);
     rotate(s.rot);
-    ink(1.4, SEA.ink);
+    ink(1.0, shade(s.col, 0.35));
     fill(s.col);
     star5(0, 0, s.r * 0.42, s.r);
     pop();
@@ -613,11 +807,12 @@ function drawFloor() {
     const x = width * (0.24 + i * 0.5);
     const y = floorY + (height - floorY) * 0.45;
     const r = Math.min(width, height) * 0.035;
+    const col = i ? SEA.skins[2] : SEA.skins[4];
     push();
     translate(x, y);
     rotate(i ? 0.4 : -0.3);
-    ink(1.4, SEA.ink);
-    fill(i ? SEA.skins[2] : SEA.skins[4]);
+    ink(1.0, shade(col, 0.35));
+    fill(col);
     star5(0, 0, r * 0.46, r);
     noStroke();
     fill(SEA.marks);
@@ -626,24 +821,64 @@ function drawFloor() {
   }
 }
 
+/* How far a point at fraction t (0 root, 1 tip) along a blade has drifted,
+   layering a slow primary sway with a faster, smaller ripple that grows
+   toward the tip — closer to how a real frond bends than one sine offset. */
+function bladeSway(t, phase, amp) {
+  const primary = Math.sin(frameCount * 0.014 + phase) * amp * Math.pow(t, 1.35);
+  const ripple = Math.sin(frameCount * 0.05 + phase * 1.7 + t * 3.4) * amp * 0.22 * t;
+  return primary + ripple;
+}
+
+/* One tapered blade, planted at (baseX, baseY), reaching up `h` at rest tilt
+   `tilt` (radians, 0 = straight up). Drawn in its own local space so a fan or
+   tuft can angle several of these off a shared root. */
+function plantBlade(baseX, baseY, h, bw, phase, tilt, col) {
+  const segs = 9;
+  const L = [], R = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const sway = bladeSway(t, phase, bw * 2.3);
+    const wgt = bw * (1 - t * 0.80) * 0.5 + 0.4;
+    const x = Math.sin(tilt) * h * t + sway;
+    const y = -Math.cos(tilt) * h * t;
+    L.push([x - wgt, y]);
+    R.push([x + wgt, y]);
+  }
+  push();
+  translate(baseX, baseY);
+  ink(Math.max(0.6, bw * 0.12), shade(col, 0.30));
+  fill(col);
+  beginShape();
+  for (const p of L) vertex(p[0], p[1]);
+  for (let i = R.length - 1; i >= 0; i--) vertex(R[i][0], R[i][1]);
+  endShape(CLOSE);
+  pop();
+}
+
 function drawWeeds() {
   for (const w of weeds) {
-    const sway = Math.sin(frameCount * 0.014 + w.phase) * w.w * 1.9;
-    ink(1.2, 'rgba(6,24,32,0.55)');
-    fill(w.col);
-    beginShape();
-    vertex(w.x - w.w * 0.5, floorY + 8);
-    bezierVertex(
-      w.x - w.w * 0.5 + sway * 0.4, floorY - w.h * 0.45,
-      w.x - w.w * 0.2 + sway, floorY - w.h * 0.8,
-      w.x + sway * 1.15, floorY - w.h
-    );
-    bezierVertex(
-      w.x + w.w * 0.5 + sway, floorY - w.h * 0.78,
-      w.x + w.w * 0.6 + sway * 0.4, floorY - w.h * 0.4,
-      w.x + w.w * 0.5, floorY + 8
-    );
-    endShape(CLOSE);
+    const base = floorY + 8;
+    if (w.type === 'fan') {
+      // a leafy clump: several broad blades splayed from one root
+      const n = w.blades;
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0 : i / (n - 1) - 0.5;
+        plantBlade(w.x, base, w.h * (0.72 + 0.22 * (1 - Math.abs(t) * 2)),
+                   w.w * 0.62, w.phase + i * 0.85, t * 0.55, w.col);
+      }
+    } else if (w.type === 'grass') {
+      // fine, tall, close-set blades, like eelgrass
+      const n = w.blades + 2;
+      for (let i = 0; i < n; i++) {
+        const off = (i - (n - 1) / 2) * w.w * 0.42;
+        plantBlade(w.x + off, base, w.h * (0.9 + 0.2 * ((i + 1) % 2)),
+                   w.w * 0.30, w.phase + i * 0.55, off * 0.0016, w.col);
+      }
+    } else {
+      // a single broad ribbon
+      plantBlade(w.x, base, w.h, w.w, w.phase, 0, w.col);
+    }
   }
 }
 
@@ -679,17 +914,9 @@ function drawGhosts() {
     translate(g.x, g.y);
     rotate(Math.sin(frameCount * 0.006 + g.phase) * 0.12);
     /* pale line and almost no fill, like the jellyfish in the reference */
-    ink(Math.max(1.4, g.w * 0.022), SEA.pale);
+    ink(Math.max(1.0, g.w * 0.015), SEA.pale);
     fill(150, 205, 210, 10);
     wobblyBlob(0, 0, g.w, h, g.id, 24, g.w * 0.035);
-    // face
-    noStroke();
-    fill(150, 205, 210, 55);
-    ellipse(-g.w * 0.17, -h * 0.08, g.w * 0.085, g.w * 0.11);
-    ellipse(g.w * 0.17, -h * 0.08, g.w * 0.085, g.w * 0.11);
-    noFill();
-    ink(Math.max(1.2, g.w * 0.02), SEA.pale);
-    arc(0, h * 0.06, g.w * 0.3, g.w * 0.2, 0.25, PI - 0.25);
     pop();
   }
 }
@@ -723,10 +950,9 @@ function tapped(px, py) {
   if (myFish && hit(myFish)) {
     Voice.unlock();
     hintEl.classList.add('gone');
-    if (!Voice.isPlaying()) {
-      if (myData && myData.voice) Voice.play();
-      else Voice.bubbleBurst(5, 0.4);
-    }
+    if (myLife.mode === 'dead') reviveFish();
+    else if (myLife.mode === 'stuck') releaseFish();
+    else feedFish();
     return;
   }
   /* the stand-ins have no voice — a poke gets a wiggle and some bubbles */

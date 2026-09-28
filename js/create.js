@@ -310,10 +310,10 @@ pick.addEventListener('change', () => {
 
 const nameInput = document.getElementById('name');
 const toVoice   = document.getElementById('toVoice');
-const fishInput = document.getElementById('fishiness');
-const fishOut   = document.getElementById('fishOut');
 
-let fishiness = +fishInput.value / 100;
+/* fishiness no longer has a dial on the picking screen — every fish is made
+   at the same middling setting, which is what most people landed on anyway. */
+let fishiness = 0.65;
 let species = 'fish';
 /* The whole face is the only cut now — your photo always rides the fish as a
    single face patch, so there's no capture-mode toggle to build. */
@@ -326,12 +326,6 @@ nameInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && draft.name) { nameInput.blur(); go(2); }
 });
 toVoice.addEventListener('click', () => go(2));
-
-fishInput.addEventListener('input', () => {
-  fishiness = +fishInput.value / 100;
-  fishOut.textContent = fishInput.value;
-  rebake();
-});
 
 /* species picker — same registry the tank draws from */
 (function buildSpecies() {
