@@ -1,21 +1,14 @@
 /* Fish Friends — the tank.
-   Fish with a person behind them — yours, and two stand-in friends — are in
-   colour. Everything else is scenery, drawn into the water. */
+   The water, planting and light are all reef.js; this file is the cast and
+   what they do. Fish with a person behind them — yours, and two stand-in
+   friends — swim in front, in full colour. The scenery cast swims further
+   back, sunk into the water by the 'scenery colour' and haze dials. */
 
-let grain, bgLayer;
-let fishes = [], friends = [], bubbles = [], ghosts = [], stars = [], weeds = [], corals = [], rays = [];
+let fishes = [], friends = [];
 let myFish = null, parts = { right: {}, left: {}, face: null }, myData = null;
 let friendParts = [];
 let school = { x: 0, y: 0, tx: 0, ty: 0 };
-
-/* Planting: dark sea-greens a shade off the water, as in the reference. */
-const PLANT_TONES = ['#14414B', '#1B4F55', '#10363F', '#205A62'];
-const CORAL_TONES = [
-  'rgba(58,122,134,0.60)',
-  'rgba(48,110,124,0.65)',
-  'rgba(70,136,146,0.52)'
-];
-let hintEl, floorY;
+let hintEl, floorY, builtW = 0, builtH = 0;
 let talkLevel = 0, mouthBubbles = [];
 
 /* ------------------------------------------------------- demo fish states
@@ -36,7 +29,6 @@ function setup() {
   pixelDensity(Math.min(2, window.devicePixelRatio || 1));
   useAppFont();
   noiseDetail(2, 0.5);
-  grain = makeGrain(220);
   hintEl = document.getElementById('hint');
 
   myData = Store.load();
@@ -63,6 +55,8 @@ function setup() {
 
   dayNight = istDayNight();
   updateDayNightBtn();
+
+  Look.mountPanel(document.getElementById('newFish'));
 
   document.getElementById('newFish').addEventListener('click', () => {
     location.href = 'index.html';
@@ -102,59 +96,28 @@ function windowResized() {
 }
 
 function buildScene() {
-  floorY = height * 0.86;
+  if (width < 2 || height < 2) return;
+  builtW = width; builtH = height;
+  floorY = height * 0.84;
   school = { x: width * 0.5, y: height * 0.35, tx: width * 0.5, ty: height * 0.35 };
-  makeBackground();
+  Reef.build(width, height, floorY);
+  buildCast();
 
   const short = Math.min(width, height);
-
-  // the scenery cast — no face, no name, no voice
-  const CAST = width < 480
-    ? ['fish', 'tiny', 'long', 'fish', 'deep', 'seahorse', 'starfish', 'tiny', 'whale']
-    : ['fish', 'tiny', 'long', 'fish', 'deep', 'seahorse', 'starfish', 'tiny',
-       'long', 'fish', 'whale', 'tiny', 'deep'];
-
-  /* base width before the species' own sizeMul is applied */
-  const BASE = { fish: 0.13, long: 0.12, deep: 0.12, tiny: 0.13,
-                 seahorse: 0.17, starfish: 0.13, whale: 0.20 };
-
-  /* Nobody owns these, so they get no colour: water-tone bodies, dark teal
-     ink, markings a step lighter — the turtles in the reference. */
-  fishes = [];
-  CAST.forEach((id, i) => {
-    const sp = Creatures.get(id);
-    const w = short * BASE[id] * (0.85 + Math.random() * 0.32);
-    const col = SEA.skins[i % SEA.skins.length];
-    fishes.push(newSwimmer({
-      id: 20 + i * 3,
-      species: id,
-      w,
-      col,
-      accent: SEA.skins[(i + 2) % SEA.skins.length],
-      /* a shade of the fish's own fill rather than a flat navy ink, so the
-         line recedes into the body instead of drawing a hard sticker edge */
-      lineCol: shade(col, 0.35),
-      patCol: SEA.marks,
-      blend: true,
-      line: Math.max(0.5, w * 0.0055),
-      speed: (0.5 + Math.random() * 0.8) * sp.speed,
-      spout: id === 'whale'
-    }));
-  });
+  const size = Look.v.fishSize;
 
   // two stand-in friends — painted eyes, full colour
   friends = SampleFriends.FRIENDS.map((fr, i) => {
     const sp = Creatures.get(fr.species);
-    const base = Math.min(short * 0.27, 165) / Math.sqrt(sp.sizeMul);
+    const base = Math.min(short * 0.27, 165) / Math.sqrt(sp.sizeMul) * size;
     const f = newSwimmer({
       id: 11 + i * 4,
       species: fr.species,
       w: base,
       col: fr.col,
-      accent: fr.accent,
-      line: Math.max(0.8, base * 0.007),
       speed: 0.6 * sp.speed
     });
+    f.base = base / size;
     f.fish = fr.fish;
     f.x = width * (i ? 0.72 : 0.28);
     f.y = height * (i ? 0.62 : 0.28);
@@ -170,171 +133,56 @@ function buildScene() {
     myFish = newSwimmer({
       id: 7,
       species: myData.species || 'fish',
-      w: base,
-      col: myData.col || PAL.orange,
-      accent: myData.col || PAL.orange,
-      line: Math.max(0.8, base * 0.007),
+      w: base * size,
+      col: myData.col || BODY_COLOURS[1],
       speed: 0.55 * mySp.speed,
       spout: myData.species === 'whale'
     });
+    myFish.base = base;
     myFish.fish = (myData.fishiness == null ? 70 : myData.fishiness) / 100;
     myFish.x = width * 0.5;
     myFish.y = height * 0.45;
   }
-
-  // bubbles
-  bubbles = [];
-  const nb = width < 480 ? 22 : 32;
-  for (let i = 0; i < nb; i++) bubbles.push(newBubble(true));
-
-  // the doodle ghosts from the reference art
-  ghosts = [];
-  for (let i = 0; i < (width < 480 ? 3 : 5); i++) {
-    ghosts.push({
-      id: 60 + i,
-      x: Math.random() * width,
-      y: Math.random() * height * 0.8,
-      w: short * (0.13 + Math.random() * 0.09),
-      vx: (Math.random() - 0.5) * 0.28,
-      vy: -0.08 - Math.random() * 0.12,
-      phase: Math.random() * TWO_PI
-    });
-  }
-
-  // floating star confetti
-  stars = [];
-  for (let i = 0; i < (width < 480 ? 11 : 16); i++) {
-    stars.push({
-      x: Math.random() * width,
-      y: height * 0.12 + Math.random() * height * 0.66,
-      r: short * (0.018 + Math.random() * 0.022),
-      rot: Math.random() * TWO_PI,
-      spin: (Math.random() - 0.5) * 0.004,
-      phase: Math.random() * TWO_PI,
-      col: SEA.skins[i % SEA.skins.length]
-    });
-  }
-
-  // seaweed along the floor — a few different kinds of planting, not one
-  // blade repeated: a broad ribbon, a fine grassy tuft, and a leafy fan
-  weeds = [];
-  const nWeeds = width < 480 ? 7 : 10;
-  const WEED_TYPES = ['ribbon', 'grass', 'fan'];
-  for (let i = 0; i < nWeeds; i++) {
-    weeds.push({
-      id: 80 + i,
-      type: WEED_TYPES[i % WEED_TYPES.length],
-      x: (width / nWeeds) * (i + 0.5) + (Math.random() - 0.5) * 40,
-      h: height * (0.09 + Math.random() * 0.11),
-      w: short * (0.030 + Math.random() * 0.024),
-      phase: Math.random() * TWO_PI,
-      blades: 3 + Math.floor(Math.random() * 3),
-      /* Planting sits close to the water on purpose. Outlined, saturated weeds
-         competed with the creatures for attention; these recede. */
-      col: PLANT_TONES[i % PLANT_TONES.length]
-    });
-  }
-
-  // coral sprigs
-  corals = [];
-  for (let i = 0; i < 3; i++) {
-    corals.push({
-      id: 100 + i,
-      x: width * (0.14 + i * 0.34) + (Math.random() - 0.5) * 30,
-      h: height * (0.07 + Math.random() * 0.05),
-      col: CORAL_TONES[i % CORAL_TONES.length]
-    });
-  }
-
-  // light shafts from the surface
-  rays = [];
-  for (let i = 0; i < 4; i++) {
-    rays.push({ x: width * (0.1 + i * 0.27), w: width * (0.10 + Math.random() * 0.10), sp: 0.0004 + Math.random() * 0.0006, ph: Math.random() * TWO_PI });
-  }
 }
 
-function makeBackground() {
-  bgLayer = createGraphics(width, height);
-  const g = bgLayer.drawingContext;
-  const lin = g.createLinearGradient(0, 0, 0, height);
-  lin.addColorStop(0.00, SEA.top);
-  lin.addColorStop(0.25, SEA.upper);
-  lin.addColorStop(0.60, SEA.mid);
-  lin.addColorStop(1.00, SEA.low);
-  g.fillStyle = lin;
-  g.fillRect(0, 0, width, height);
+/* The scenery cast — no face, no name, no voice. Each is given a depth: the
+   further back, the smaller, the hazier and the thinner its ink. */
+function buildCast() {
+  const short = Math.min(width, height);
+  const ALL = ['fish', 'tiny', 'long', 'deep', 'tiny', 'seahorse', 'fish', 'starfish', 'tiny',
+               'whale', 'long', 'deep', 'tiny', 'fish', 'manta', 'tiny', 'shark', 'tiny'];
+  const n = Math.round((width < 480 ? 10 : 16) * Look.v.cast * 1.25);
+  const CAST = ALL.slice(0, Math.min(ALL.length, n));
 
-  // a faint moonlit pool near the surface
-  const rad = g.createRadialGradient(width * 0.5, -height * 0.1, 10, width * 0.5, height * 0.3, height * 0.7);
-  rad.addColorStop(0, 'rgba(90,160,170,0.22)');
-  rad.addColorStop(1, 'rgba(90,160,170,0)');
-  g.fillStyle = rad;
-  g.fillRect(0, 0, width, height);
+  /* base width before the species' own sizeMul is applied */
+  const BASE = { fish: 0.13, long: 0.12, deep: 0.12, tiny: 0.13, seahorse: 0.17,
+                 starfish: 0.13, whale: 0.20, manta: 0.15, shark: 0.15 };
 
-  // the fine speckle the reference art has all over it
-  bgLayer.noStroke();
-  for (let i = 0; i < width * height / 2600; i++) {
-    bgLayer.fill(150, 205, 210, 8 + Math.random() * 22);
-    bgLayer.circle(Math.random() * width, Math.random() * height, Math.random() * 2.2 + 0.5);
-  }
-  for (let i = 0; i < width * height / 6000; i++) {
-    bgLayer.fill(4, 18, 26, 30 + Math.random() * 50);
-    bgLayer.circle(Math.random() * width, Math.random() * height, Math.random() * 2.6 + 0.6);
-  }
-  drawDoodles(bgLayer);
+  fishes = [];
+  CAST.forEach((id, i) => {
+    const sp = Creatures.get(id);
+    const depth = 0.15 + Math.random() * 0.7;
+    const w = short * BASE[id] * (0.85 + Math.random() * 0.3) * (1 - depth * 0.35) * Look.v.fishSize;
+    fishes.push(newSwimmer({
+      id: 20 + i * 3,
+      species: id,
+      w,
+      col: BODY_COLOURS[(i * 3 + Math.floor(Math.random() * 3)) % BODY_COLOURS.length],
+      blend: true,
+      depth,
+      speed: (0.5 + Math.random() * 0.8) * sp.speed,
+      spout: id === 'whale'
+    }));
+  });
+  /* far ones first, so nearer ones swim over them */
+  fishes.sort((a, b) => b.depth - a.depth);
 }
 
-/* The confetti the reference is covered in — rings, dots, asterisks, little
-   stars and spirals, inked in dark teal with the odd pale one. It never
-   moves, so it is baked into the background rather than drawn every frame. */
-function drawDoodles(pg) {
-  const s = Math.min(width, height);
-  const n = Math.round(width * height / 7000);
-  pg.strokeJoin(ROUND);
-  pg.strokeCap(ROUND);
-  for (let i = 0; i < n; i++) {
-    const x = Math.random() * width;
-    const y = height * 0.04 + Math.random() * (floorY - height * 0.04);
-    const r = s * (0.006 + Math.random() * 0.012);
-    const c = Math.random() < 0.78 ? 'rgba(8,28,36,0.55)' : 'rgba(150,205,210,0.22)';
-    pg.push();
-    pg.translate(x, y);
-    pg.rotate(Math.random() * TWO_PI);
-    pg.stroke(c);
-    pg.strokeWeight(Math.max(1, r * 0.22));
-    pg.noFill();
-    switch (i % 6) {
-      case 0:                                         // ring
-        pg.circle(0, 0, r * 2);
-        break;
-      case 1:                                         // dot
-        pg.noStroke(); pg.fill(c);
-        pg.circle(0, 0, r * 0.9);
-        break;
-      case 2:                                         // asterisk
-        for (let k = 0; k < 3; k++) {
-          const a = (k * PI) / 3;
-          pg.line(-Math.cos(a) * r, -Math.sin(a) * r, Math.cos(a) * r, Math.sin(a) * r);
-        }
-        break;
-      case 3:                                         // little star
-        pg.beginShape();
-        for (let k = 0; k < 10; k++) {
-          const a = -HALF_PI + (PI * k) / 5, rr = k % 2 ? r * 0.45 : r * 1.1;
-          pg.vertex(Math.cos(a) * rr, Math.sin(a) * rr);
-        }
-        pg.endShape(CLOSE);
-        break;
-      case 4:                                         // spiral
-        pg.beginShape();
-        for (let t = 0; t <= 3 * PI; t += 0.35) pg.vertex(Math.cos(t) * r * t / (3 * PI), Math.sin(t) * r * t / (3 * PI));
-        pg.endShape();
-        break;
-      default:                                        // a cluster of tiny rings
-        for (let k = 0; k < 3; k++) pg.circle((k - 1) * r * 0.9, (k % 2) * r * 0.6, r * 0.7);
-    }
-    pg.pop();
-  }
+/* the fish-size dial, applied to the friends and you without moving anyone */
+function resizePeople() {
+  const size = Look.v.fishSize;
+  for (const fr of friends) if (fr.f.base) fr.f.w = fr.f.base * size;
+  if (myFish && myFish.base) myFish.w = myFish.base * size;
 }
 
 /* ------------------------------------------------------------ swimmers */
@@ -348,6 +196,8 @@ function newSwimmer(o) {
     tilt: 0,
     spin: 0,
     species: 'fish',
+    head: 0,
+    flip: 1,
     phase: Math.random() * TWO_PI,
     talk: 0,
     effort: 1,
@@ -361,6 +211,13 @@ function newSwimmer(o) {
   /* only a creature that actually spins starts at a random angle — everyone
      else must stay the way up they were drawn */
   if (Creatures.get(f.species).spins) f.spin = Math.random() * TWO_PI;
+  f.head = f.dir > 0 ? 0 : Math.PI;
+  f.flip = f.dir;
+  /* the two that belong on the bottom start there, instead of spending their
+     first minute of a very slow life sinking from wherever they spawned */
+  if (f.species === 'seahorse' || f.species === 'starfish') {
+    f.y = height * 0.55 + Math.random() * Math.max(0, floorY - height * 0.55) * 0.85;
+  }
   pickTarget(f);
   return f;
 }
@@ -397,8 +254,20 @@ function pickTarget(f) {
     f.ty = top + Math.random() * (bot - top) * 0.7;
     return;
   }
-  f.tx = mx + Math.random() * Math.max(1, width - mx * 2);
-  f.ty = top + Math.random() * Math.max(1, bot - top);
+  /* Pick somewhere ahead four times out of five. A fish that picks a new spot
+     uniformly at random spends half its life doubling back on itself, which is
+     the single thing that makes a tank look like a screensaver rather than
+     like animals getting on with something. */
+  const ahead = Math.random() < 0.8;
+  const reach = width * (0.25 + Math.random() * 0.45);
+  if (ahead) {
+    f.tx = constrain(f.x + Math.cos(f.head) * reach, mx, width - mx);
+    f.ty = constrain(f.y + Math.sin(f.head) * reach * 0.5 +
+                     (Math.random() - 0.5) * height * 0.30, top, bot);
+  } else {
+    f.tx = mx + Math.random() * Math.max(1, width - mx * 2);
+    f.ty = top + Math.random() * Math.max(1, bot - top);
+  }
 }
 
 /* Where the shoal of small fish is drifting. */
@@ -411,55 +280,138 @@ function moveSchool() {
   school.y = lerp(school.y, school.ty, 0.004);
 }
 
-/* Every species moves the way its real counterpart does. The differences are
-   the point: a tank where everything glides at one speed reads as a screensaver. */
+/* ------------------------------------------------------------- steering
+
+   One rule underpins everything here: a creature cannot slide sideways. It
+   points where it is going, it swings that heading no faster than its own
+   body allows, and the thrust always comes out of the back. Arcs instead of
+   corners, banking into a turn, overshooting a target and coming back round
+   — none of that is animated, it all falls out of that one constraint.
+
+   Every species then differs in how hard it can turn, how steeply it will
+   point up or down, and how its thrust arrives: in beats, continuously, in
+   wingbeats, or barely at all. The differences are the point — a tank where
+   everything glides at one speed reads as a screensaver. */
+
+function angleWrap(a) {
+  while (a > Math.PI) a -= TWO_PI;
+  while (a < -Math.PI) a += TWO_PI;
+  return a;
+}
+
+/* Clamp how steeply a heading points up or down, without changing which way
+   along the tank it faces. */
+function clampPitch(a, m) {
+  const left = Math.cos(a) < 0;
+  const p = constrain(left ? angleWrap(Math.PI - a) : a, -m, m);
+  return left ? angleWrap(Math.PI - p) : p;
+}
+
+/* Small fish hold station on each other, not just on the shoal's centre: they
+   keep a body's length apart and point the way their neighbours point. Both
+   are needed — separation alone gives a cloud, alignment alone gives a clump
+   that drifts through itself. */
+function shoalForce(f, dm) {
+  let sx = 0, sy = 0, hx = 0, hy = 0, n = 0;
+  const R = dm.w * 2.0;
+  for (const o of fishes) {
+    if (o === f || o.species !== 'tiny') continue;
+    const dx = f.x - o.x, dy = f.y - o.y;
+    const d = Math.hypot(dx, dy);
+    if (d > R || d < 0.01) continue;
+    const k = 1 - d / R;
+    sx += (dx / d) * k; sy += (dy / d) * k;
+    hx += Math.cos(o.head); hy += Math.sin(o.head);
+    n++;
+  }
+  return n ? { sx, sy, hx: hx / n, hy: hy / n, n } : null;
+}
+
 function swim(f) {
   const sp = Creatures.get(f.species);
   const dm = Creatures.dims(f);
   const dx = f.tx - f.x, dy = f.ty - f.y;
   const d = Math.hypot(dx, dy) || 1;
-  const ux = dx / d, uy = dy / d;
-  if (d < dm.w * 0.5) pickTarget(f);
+  if (d < dm.w * 0.6) pickTarget(f);
   if (f.effort == null) f.effort = 1;
 
+  /* Weight costs speed and agility — an overfed fish is visibly labouring. */
+  const fat = Creatures.fatK(f);
+  const spd = f.speed * Look.v.speed * (1 - 0.34 * fat);
+
+  /* ---- where it wants to be pointing: the target, the walls, the shoal */
+  let wx = dx / d, wy = (dy / d) * 0.55;
+
+  const mx = dm.w * 1.6, my = dm.h * 1.2;
+  const top = height * 0.10, bot = floorY;
+  if (f.x < mx)          wx += (1 - f.x / mx) * 2.6;
+  if (f.x > width - mx)  wx -= (1 - (width - f.x) / mx) * 2.6;
+  if (f.y < top + my)    wy += (1 - (f.y - top) / my) * 2.6;
+  if (f.y > bot - my)    wy -= (1 - (bot - f.y) / my) * 2.6;
+
+  if (f.species === 'tiny') {
+    const sh = shoalForce(f, dm);
+    if (sh) {
+      wx += sh.sx * 1.5; wy += sh.sy * 1.5;
+      wx += sh.hx * 0.9; wy += sh.hy * 0.9;
+    }
+  }
+
+  const want = clampPitch(Math.atan2(wy, wx), sp.pitch == null ? 0.4 : sp.pitch);
+  const rate = (sp.turn == null ? 0.05 : sp.turn) *
+               (0.5 + 0.5 * f.effort) * (1 - 0.3 * fat);
+  f.head = angleWrap(f.head + constrain(angleWrap(want - f.head), -rate, rate));
+
+  const hx = Math.cos(f.head), hy = Math.sin(f.head);
+
+  /* ---- how the thrust arrives */
   switch (sp.motion) {
 
-    case 'burst':
+    case 'burst': {
       /* Most fish swim in beats: a few hard tail strokes, then a glide. The
-         tail goes still during the glide, which is most of the time. */
+         tail goes still during the glide, which is most of the time. A fish
+         with somewhere to be starts a new beat sooner. */
+      const small = f.species === 'tiny';
       if (f.burst > 0) f.burst--;
-      else if (Math.random() < (f.species === 'tiny' ? 0.05 : 0.022)) {
-        f.burst = (f.species === 'tiny' ? 7 : 15) + Math.random() * 14;
+      else if (Math.random() < (small ? 0.055 : 0.028) + (d > width * 0.3 ? 0.02 : 0)) {
+        f.burst = (small ? 6 : 12) + Math.random() * 14;
       }
       if (f.burst > 0) {
-        f.vx += ux * f.speed * 0.085;
-        f.vy += uy * f.speed * 0.065;
+        const thr = spd * (small ? 0.10 : 0.105);
+        f.vx += hx * thr; f.vy += hy * thr;
       }
-      f.vx *= 0.952; f.vy *= 0.952;
-      f.effort = lerp(f.effort, f.burst > 0 ? 1 : 0, 0.22);
+      f.vx *= 0.948; f.vy *= 0.948;
+      f.effort = lerp(f.effort, f.burst > 0 ? 1 : 0.05, 0.20);
       break;
+    }
 
     case 'undulate':
       /* Eels never coast — the wave runs continuously down the body, and the
-         wave phase is what actually drives the drawing. */
-      f.vx = lerp(f.vx, ux * f.speed, 0.022);
-      f.vy = lerp(f.vy, uy * f.speed * 0.55, 0.022);
+         wave phase is what actually drives the drawing, so the thrust has to
+         come from the same phase or the body slides along without pushing. */
+      f.wave = (f.wave || 0) + 0.15 + Math.hypot(f.vx, f.vy) * 0.05;
+      {
+        const thr = spd * 0.050 * (0.55 + 0.45 * Math.abs(Math.sin(f.wave)));
+        f.vx += hx * thr; f.vy += hy * thr;
+      }
+      f.vx *= 0.935; f.vy *= 0.935;
       f.effort = 1;
-      f.wave = (f.wave || 0) + 0.17 + Math.hypot(f.vx, f.vy) * 0.06;
       break;
 
     case 'hover':
       /* Deep-bodied fish row with their pectorals: slow, fussy, and stopping
-         constantly to hang in one place. */
+         constantly to hang in one place — but never quite still, because
+         holding station takes constant small corrections. */
       if (f.pause > 0) {
         f.pause--;
-        f.effort = lerp(f.effort, 0.12, 0.08);
+        f.effort = lerp(f.effort, 0.15, 0.08);
       } else {
         if (Math.random() < 0.011) f.pause = 40 + Math.random() * 80;
-        f.vx += ux * f.speed * 0.024;
-        f.vy += uy * f.speed * 0.030;
-        f.effort = lerp(f.effort, 0.75, 0.07);
+        const thr = spd * 0.032;
+        f.vx += hx * thr; f.vy += hy * thr;
+        f.effort = lerp(f.effort, 0.78, 0.07);
       }
+      f.vy += Math.sin(frameCount * 0.045 + f.phase) * 0.012;   // never quite still
       f.vx *= 0.90; f.vy *= 0.90;
       break;
 
@@ -472,8 +424,8 @@ function swim(f) {
       const roll = (Math.sin(f.coilPhase) + 1) / 2;
       f.coil = 0.30 + 0.70 * roll;
       const kick = Math.max(0, Math.cos(f.coilPhase));
-      f.vx += ux * f.speed * 0.030 * kick;
-      f.vy += uy * f.speed * 0.038 * kick;
+      const thr = spd * 0.036 * kick;
+      f.vx += hx * thr; f.vy += hy * thr;
       f.vy += Math.sin(frameCount * 0.028 + f.phase) * 0.022;   // gentle bob
       f.vx *= 0.935; f.vy *= 0.935;
       f.effort = 1;                                             // the fin never stops
@@ -482,35 +434,105 @@ function swim(f) {
 
     case 'crawl':
       /* A starfish does not swim. It drifts and slowly turns. */
-      f.vx = lerp(f.vx, ux * f.speed * 0.45, 0.005);
-      f.vy = lerp(f.vy, uy * f.speed * 0.45, 0.005);
+      f.vx = lerp(f.vx, hx * spd * 0.40, 0.006);
+      f.vy = lerp(f.vy, hy * spd * 0.40, 0.006);
       f.effort = 0;
       break;
 
-    case 'cruise':
-      /* A whale holds its line and turns slowly; the flukes sweep long and low. */
-      f.vx = lerp(f.vx, ux * f.speed, 0.007);
-      f.vy = lerp(f.vy, uy * f.speed * 0.40, 0.007);
+    case 'cruise': {
+      /* A whale holds its line and turns slowly; the flukes sweep long and
+         low, and it rises and sinks in a long shallow arc rather than
+         levelling off the way a fish does. */
+      const thr = spd * 0.016;
+      f.vx += hx * thr; f.vy += hy * thr;
+      f.vy += Math.sin(frameCount * 0.004 + f.phase) * 0.0022;
+      f.vx *= 0.985; f.vy *= 0.985;
       f.effort = 0.9;
       break;
+    }
+
+    case 'patrol': {
+      /* A shark cannot stop — it has no swim bladder and must keep moving to
+         breathe. Constant speed, no glide, wide slow turns. */
+      const thr = spd * 0.030;
+      f.vx += hx * thr; f.vy += hy * thr;
+      f.vx *= 0.972; f.vy *= 0.972;
+      f.effort = 0.85 + 0.15 * Math.sin(frameCount * 0.01 + f.phase);
+      break;
+    }
+
+    case 'flap': {
+      /* A manta flies rather than swims: thrust arrives in a pulse on each
+         downstroke and it coasts between them, rising slightly as the wings
+         come down. Driven off the same phase the wings are drawn from. */
+      const ph = frameCount * (f.wagSpeed || 0.06) + f.phase;
+      const pulse = Math.max(0, Math.sin(ph));
+      const thr = spd * 0.038 * pulse;
+      f.vx += hx * thr; f.vy += hy * thr;
+      f.vy -= Math.cos(ph) * 0.02;
+      f.vx *= 0.976; f.vy *= 0.976;
+      f.effort = 0.45 + 0.55 * pulse;
+      break;
+    }
 
     default:
-      f.vx = lerp(f.vx, ux * f.speed, 0.018);
-      f.vy = lerp(f.vy, uy * f.speed * 0.75, 0.018);
+      f.vx += hx * spd * 0.03;
+      f.vy += hy * spd * 0.03;
+      f.vx *= 0.96; f.vy *= 0.96;
   }
 
   f.x += f.vx;
   f.y += f.vy;
-  if (sp.flips && Math.abs(f.vx) > 0.06) f.dir = f.vx > 0 ? 1 : -1;
+
+  /* A fat fish sags. As a trim on the position rather than a push on the
+     velocity: added to velocity it would be divided by the drag and the fish
+     would simply sink to the floor and stay there. */
+  if (fat > 0.01) f.y += fat * 0.07;
+
+  /* The steering above keeps everyone inside the tank in the ordinary case;
+     this is only for the overshoot at the end of a hard burst, so that
+     nothing is ever drawn buried in the sand or clipped off the top. */
+  const lo = height * 0.06 + dm.h * 0.3;
+  const hi = floorY - dm.h * (f.species === 'starfish' ? 0.02 : 0.15);
+  if (f.y < lo) { f.y = lo; f.vy = Math.max(0, f.vy); }
+  if (f.y > hi) { f.y = hi; f.vy = Math.min(0, f.vy); }
+  const lx = dm.w * 0.45, rx = width - dm.w * 0.45;
+  if (f.x < lx) { f.x = lx; f.vx = Math.max(0, f.vx); }
+  if (f.x > rx) { f.x = rx; f.vx = Math.min(0, f.vx); }
+
+  /* ---- which way it is facing, and how it sits in the water */
+
+  /* The flip is animated rather than snapped. A fish turning around passes
+     through edge-on, where it is foreshortened to almost nothing — which is
+     exactly what a real one does, and is the difference between a turn and
+     the whole animal being mirrored between two frames. The dead zone around
+     vertical stops a hovering creature flickering between the two. */
+  if (sp.flips) {
+    if (hx > 0.25) f.dir = 1;
+    else if (hx < -0.25) f.dir = -1;
+    f.flip += constrain(f.dir - f.flip, -0.15, 0.15);
+  }
 
   if (sp.spins) {
-    f.spin += 0.0035;
+    f.spin += 0.0035 + Math.hypot(f.vx, f.vy) * 0.0012;
     f.tilt = 0;
   } else if (f.species === 'seahorse') {
     /* upright, always — a seahorse leaning into a turn looks broken */
-    f.tilt = constrain(f.vy * 0.05, -0.12, 0.12) * f.dir;
+    f.tilt = lerp(f.tilt, constrain(f.vy * 0.05, -0.12, 0.12), 0.1);
   } else {
-    f.tilt = constrain(f.vy * 0.16, -0.32, 0.32) * f.dir;
+    /* Point the body along the velocity. Measuring the angle in the creature's
+       own mirrored frame is what keeps a fish swimming down-and-left nose
+       down: taking it from vy alone tilts it the wrong way on one of the two
+       headings. */
+    const v = Math.hypot(f.vx, f.vy);
+    const lim = (sp.pitch == null ? 0.4 : sp.pitch) + 0.12;
+    const aim = v > 0.06 ? constrain(Math.atan2(f.vy, f.vx * f.dir), -lim, lim) : 0;
+    /* the eased pitch is kept apart from the yaw, or each frame's yaw is eased
+       into the next frame's starting pitch and the creature slowly rolls */
+    f._pitch = lerp(f._pitch || 0, aim, 0.08);
+    /* the body yaws a little against the tail beat, the way a swimming fish's
+       head does — only while it is actually working */
+    f.tilt = f._pitch + Math.sin(frameCount * f.wagSpeed + f.phase) * 0.035 * (f.effort || 0);
   }
 }
 
@@ -539,6 +561,7 @@ function reviveFish() {
 
 function stickFish() {
   if (!myFish) return;
+  const weeds = Reef.anchors();
   let best = weeds[0], bestD = Infinity;
   for (const w of weeds) {
     const d = Math.abs(w.x - myFish.x);
@@ -547,7 +570,7 @@ function stickFish() {
   myLife = { mode: 'stuck', fat: false, feedCount: 0, stuckWeed: best };
   if (best) {
     myFish.x = best.x;
-    myFish.y = floorY - best.h * 0.55;
+    myFish.y = Math.min(floorY - Creatures.dims(myFish).h * 0.4, best.base - best.h * 0.5);
   }
   myFish.vx = myFish.vy = 0;
 }
@@ -635,55 +658,40 @@ function drawStuckWeeds(f) {
   if (!w) return;
   const dm = Creatures.dims(f);
   const base = f.y + dm.h * 0.5;
-  plantBlade(f.x - dm.w * 0.12, base, dm.h * 1.3, dm.w * 0.09, w.phase, -0.18, w.col);
-  plantBlade(f.x + dm.w * 0.18, base, dm.h * 1.4, dm.w * 0.08, w.phase + 1.3, 0.22, w.col);
-}
-
-/* -------------------------------------------------------------- bubbles */
-
-function newBubble(scatter) {
-  const s = Math.min(width, height);
-  return {
-    x: Math.random() * width,
-    y: scatter ? Math.random() * height : height + 20,
-    r: s * (0.008 + Math.random() * 0.022),
-    sp: 0.5 + Math.random() * 1.1,
-    ph: Math.random() * TWO_PI
-  };
+  Reef.strand(drawingContext, f.x - dm.w * 0.12, base, dm.h * 1.3, dm.w * 0.07, w.phase, -0.18);
+  Reef.strand(drawingContext, f.x + dm.w * 0.18, base, dm.h * 1.4, dm.w * 0.06, w.phase + 1.3, 0.22);
 }
 
 /* ---------------------------------------------------------------- draw */
 
 function draw() {
   /* If the page loads in a background tab the canvas can still be 0x0 when
-     setup() runs, which bakes an empty background layer and leaves the tank
-     blank for good. Rebuild whenever the layer and the canvas disagree. */
-  if (!bgLayer || bgLayer.width !== width || bgLayer.height !== height) {
+     setup() runs. Rebuild whenever the scene and the canvas disagree. */
+  if (builtW !== width || builtH !== height) {
     if (width < 2 || height < 2) return;
     buildScene();
   }
-  image(bgLayer, 0, 0);
-  drawRays();
-  drawStars();
-  drawFloor();
-  drawWeeds();
-  drawCorals();
-  drawGhosts();
-
-  for (const b of bubbles) {
-    b.y -= b.sp;
-    b.x += Math.sin(frameCount * 0.02 + b.ph) * 0.5;
-    if (b.y < -30) Object.assign(b, newBubble(false));
-    noFill();
-    ink(Math.max(1, b.r * 0.10), SEA.pale);
-    circle(b.x, b.y, b.r * 2);
-    noStroke();
-    fill(150, 205, 210, 45);
-    circle(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.4);
+  if (Look.takeSceneDirty()) {
+    Look.takeBgDirty();
+    Reef.relayout();
+    buildCast();
+    resizePeople();
+  } else if (Look.takeBgDirty()) {
+    Reef.rebake();
   }
+
+  const ctx = drawingContext;
+  const night = dayNight === 'night';
+
+  Reef.drawBack(ctx);
+  Reef.drawFloor(ctx, night);
+  Reef.drawRays(ctx, night);
 
   moveSchool();
   for (const f of fishes) { swim(f); drawCreature(f); }
+
+  Reef.drawFront(ctx);
+  if (night) Reef.night(ctx, 0.6);
 
   /* people last, so a friend is never swum over by scenery */
   for (const fr of friends) {
@@ -717,208 +725,10 @@ function draw() {
   for (const fr of friends) drawNameTag(fr.f, fr.name);
   if (myFish) drawNameTag(myFish, myData ? myData.name : '');
 
-  drawGrain(grain, 26, 1.6);
-  vignette();
-}
-
-function vignette() {
-  const g = drawingContext;
-  const r = g.createRadialGradient(
-    width / 2, height * 0.44, Math.min(width, height) * 0.26,
-    width / 2, height * 0.52, Math.max(width, height) * 0.78
-  );
-  r.addColorStop(0, 'rgba(4,14,20,0)');
-  r.addColorStop(1, 'rgba(4,14,20,0.50)');
-  g.fillStyle = r;
-  g.fillRect(0, 0, width, height);
-}
-
-/* Sunrays by day, moonlight by night — same shafts, different warmth and
-   strength, so the toggle (and the real clock behind it) actually reads. */
-function drawRays() {
-  noStroke();
-  const day = dayNight === 'day';
-  for (const r of rays) {
-    const off = Math.sin(frameCount * r.sp * 12 + r.ph) * width * 0.03;
-    if (day) fill(255, 244, 205, 13);
-    else fill(150, 175, 225, 6);
-    beginShape();
-    vertex(r.x + off - r.w * 0.18, 0);
-    vertex(r.x + off + r.w * 0.18, 0);
-    vertex(r.x + off + r.w * 0.75, height * 0.82);
-    vertex(r.x + off - r.w * 0.75, height * 0.82);
-    endShape(CLOSE);
-  }
-
-  // a soft pool of light at the surface, warm by day, cool and dim by night
-  const g = drawingContext;
-  const rad = g.createRadialGradient(width * 0.5, -height * 0.05, 10, width * 0.5, height * 0.22, height * 0.55);
-  rad.addColorStop(0, day ? 'rgba(255,244,205,0.12)' : 'rgba(150,170,230,0.07)');
-  rad.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = rad;
-  g.fillRect(0, 0, width, height);
-}
-
-function drawStars() {
-  for (const s of stars) {
-    s.rot += s.spin;
-    const y = s.y + Math.sin(frameCount * 0.01 + s.phase) * 7;
-    push();
-    translate(s.x, y);
-    rotate(s.rot);
-    ink(1.0, shade(s.col, 0.35));
-    fill(s.col);
-    star5(0, 0, s.r * 0.42, s.r);
-    pop();
-  }
-}
-
-function star5(cx, cy, rIn, rOut) {
-  beginShape();
-  for (let i = 0; i < 10; i++) {
-    const a = -HALF_PI + (PI * i) / 5;
-    const r = i % 2 === 0 ? rOut : rIn;
-    vertex(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-  }
-  endShape(CLOSE);
-}
-
-function drawFloor() {
-  ink(1.6, 'rgba(8,28,36,0.6)');
-  fill(SEA.bed);
-  beginShape();
-  vertex(-10, height + 10);
-  for (let x = -10; x <= width + 10; x += 26) {
-    vertex(x, floorY + Math.sin(x * 0.012 + 1.3) * 9 + noise(x * 0.01, frameCount * 0.0015) * 10);
-  }
-  vertex(width + 10, height + 10);
-  endShape(CLOSE);
-
-  noStroke();
-  for (let i = 0; i < 40; i++) {
-    const x = ((i * 97.3) % width);
-    const y = floorY + 18 + ((i * 53.7) % (height - floorY - 20));
-    fill(i % 3 ? 'rgba(150,205,210,0.18)' : 'rgba(8,28,36,0.35)');
-    circle(x, y, 2 + (i % 4));
-  }
-
-  // a couple of starfish resting on the sand
-  for (let i = 0; i < 2; i++) {
-    const x = width * (0.24 + i * 0.5);
-    const y = floorY + (height - floorY) * 0.45;
-    const r = Math.min(width, height) * 0.035;
-    const col = i ? SEA.skins[2] : SEA.skins[4];
-    push();
-    translate(x, y);
-    rotate(i ? 0.4 : -0.3);
-    ink(1.0, shade(col, 0.35));
-    fill(col);
-    star5(0, 0, r * 0.46, r);
-    noStroke();
-    fill(SEA.marks);
-    for (let k = 0; k < 4; k++) circle((k - 1.5) * r * 0.24, (k % 2) * r * 0.2 - r * 0.1, r * 0.13);
-    pop();
-  }
-}
-
-/* How far a point at fraction t (0 root, 1 tip) along a blade has drifted,
-   layering a slow primary sway with a faster, smaller ripple that grows
-   toward the tip — closer to how a real frond bends than one sine offset. */
-function bladeSway(t, phase, amp) {
-  const primary = Math.sin(frameCount * 0.014 + phase) * amp * Math.pow(t, 1.35);
-  const ripple = Math.sin(frameCount * 0.05 + phase * 1.7 + t * 3.4) * amp * 0.22 * t;
-  return primary + ripple;
-}
-
-/* One tapered blade, planted at (baseX, baseY), reaching up `h` at rest tilt
-   `tilt` (radians, 0 = straight up). Drawn in its own local space so a fan or
-   tuft can angle several of these off a shared root. */
-function plantBlade(baseX, baseY, h, bw, phase, tilt, col) {
-  const segs = 9;
-  const L = [], R = [];
-  for (let i = 0; i <= segs; i++) {
-    const t = i / segs;
-    const sway = bladeSway(t, phase, bw * 2.3);
-    const wgt = bw * (1 - t * 0.80) * 0.5 + 0.4;
-    const x = Math.sin(tilt) * h * t + sway;
-    const y = -Math.cos(tilt) * h * t;
-    L.push([x - wgt, y]);
-    R.push([x + wgt, y]);
-  }
-  push();
-  translate(baseX, baseY);
-  ink(Math.max(0.6, bw * 0.12), shade(col, 0.30));
-  fill(col);
-  beginShape();
-  for (const p of L) vertex(p[0], p[1]);
-  for (let i = R.length - 1; i >= 0; i--) vertex(R[i][0], R[i][1]);
-  endShape(CLOSE);
-  pop();
-}
-
-function drawWeeds() {
-  for (const w of weeds) {
-    const base = floorY + 8;
-    if (w.type === 'fan') {
-      // a leafy clump: several broad blades splayed from one root
-      const n = w.blades;
-      for (let i = 0; i < n; i++) {
-        const t = n === 1 ? 0 : i / (n - 1) - 0.5;
-        plantBlade(w.x, base, w.h * (0.72 + 0.22 * (1 - Math.abs(t) * 2)),
-                   w.w * 0.62, w.phase + i * 0.85, t * 0.55, w.col);
-      }
-    } else if (w.type === 'grass') {
-      // fine, tall, close-set blades, like eelgrass
-      const n = w.blades + 2;
-      for (let i = 0; i < n; i++) {
-        const off = (i - (n - 1) / 2) * w.w * 0.42;
-        plantBlade(w.x + off, base, w.h * (0.9 + 0.2 * ((i + 1) % 2)),
-                   w.w * 0.30, w.phase + i * 0.55, off * 0.0016, w.col);
-      }
-    } else {
-      // a single broad ribbon
-      plantBlade(w.x, base, w.h, w.w, w.phase, 0, w.col);
-    }
-  }
-}
-
-function drawCorals() {
-  for (const c of corals) {
-    push();
-    translate(c.x, floorY + 6);
-    ink(Math.max(3, c.h * 0.085), c.col);
-    noFill();
-    const branches = 5;
-    for (let i = 0; i < branches; i++) {
-      const a = -HALF_PI + (i - (branches - 1) / 2) * 0.42;
-      const len = c.h * (0.65 + (i % 2) * 0.35);
-      const ex = Math.cos(a) * len, ey = Math.sin(a) * len;
-      wobblyLine(0, 0, ex, ey, c.id + i, c.h * 0.05, 7);
-      wobblyLine(ex, ey, ex + Math.cos(a - 0.6) * len * 0.42, ey + Math.sin(a - 0.6) * len * 0.42, c.id + i + 30, c.h * 0.04, 5);
-      wobblyLine(ex * 0.6, ey * 0.6, ex * 0.6 + Math.cos(a + 0.7) * len * 0.36, ey * 0.6 + Math.sin(a + 0.7) * len * 0.36, c.id + i + 60, c.h * 0.04, 5);
-    }
-    pop();
-  }
-}
-
-function drawGhosts() {
-  for (const g of ghosts) {
-    g.x += g.vx + Math.sin(frameCount * 0.008 + g.phase) * 0.25;
-    g.y += g.vy;
-    if (g.y < -g.w) { g.y = height + g.w * 0.6; g.x = Math.random() * width; }
-    if (g.x < -g.w) g.x = width + g.w;
-    if (g.x > width + g.w) g.x = -g.w;
-
-    const h = g.w * 1.05;
-    push();
-    translate(g.x, g.y);
-    rotate(Math.sin(frameCount * 0.006 + g.phase) * 0.12);
-    /* pale line and almost no fill, like the jellyfish in the reference */
-    ink(Math.max(1.0, g.w * 0.015), SEA.pale);
-    fill(150, 205, 210, 10);
-    wobblyBlob(0, 0, g.w, h, g.id, 24, g.w * 0.035);
-    pop();
-  }
+  Reef.drawBubbles(ctx);
+  Reef.drawParticles(ctx);
+  if (night) Reef.night(ctx, 0.22);
+  Reef.drawOverlay(ctx);
 }
 
 /* --------------------------------------------------- talking + tapping */
@@ -936,9 +746,7 @@ function drawMouthBubbles() {
     const b = mouthBubbles[i];
     b.x += b.vx; b.y += b.vy; b.life -= 0.012; b.r *= 1.004;
     if (b.life <= 0) { mouthBubbles.splice(i, 1); continue; }
-    noFill();
-    ink(1.6, 'rgba(170,220,225,' + (0.6 * b.life).toFixed(2) + ')');
-    circle(b.x, b.y, b.r * 2);
+    Reef.bubble(drawingContext, b.x, b.y, b.r, Math.min(1, b.life * 1.4));
   }
 }
 

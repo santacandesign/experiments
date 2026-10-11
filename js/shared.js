@@ -20,27 +20,9 @@ const PAL = {
   sand:   '#EBDCC0'
 };
 
-/* The water, and everything that belongs to it.
-
-   Taken from the dark reference: a deep petrol teal, where the planting, the
-   bubbles and every fish nobody owns are drawn a shade or two off the water and
-   inked in a darker teal. Colour is reserved for fish with a person behind them,
-   so a friend is the first thing you find in the tank. */
-const SEA = {
-  top:    '#0C2431',
-  upper:  '#133746',
-  mid:    '#1A4A59',
-  low:    '#215766',
-  bed:    '#2E6776',
-  ink:    '#0A222C',                       // doodle line, a notch under the water
-  pale:   'rgba(150,205,210,0.30)',        // bubbles, jelly outlines
-  /* fills for scenery creatures — each a step either side of the water */
-  skins:  ['#1E5463', '#245D6C', '#2A6574', '#1B4D5C', '#2F6C7A'],
-  marks:  '#3A7B89'                        // their stripes and spots
-};
-
-/* Body colours my fish can be given. */
-const BODY_COLOURS = [PAL.orange, PAL.coral, PAL.yellow, PAL.blush, PAL.teal, PAL.lime];
+/* Body colours my fish can be given — the `body` of each scheme in paint.js,
+   which supplies the belly, head, cheek, fin and marking colours to go with it. */
+const BODY_COLOURS = ['#FF4A1C', '#FF8A12', '#FFC612', '#FF8FB8', '#0F8A4B', '#10B4CC', '#93A9FF', '#8C9C14'];
 
 /* A dead fish loses its owner colour — grey is the "this is nobody now" signal,
    the inverse of [[fish-friends-colour-rule]]. */
@@ -66,15 +48,23 @@ const Store = (() => {
 /* ------------------------------------------------- hand-drawn line helpers */
 
 /* The "boil": the wobble seed only changes every few frames, so outlines
-   shimmer at ~10fps the way hand-inked animation does, instead of buzzing. */
+   shimmer at ~10fps the way hand-inked animation does, instead of buzzing.
+   The rate is the 'line boil' dial (paint.js); 6 frames is its default. */
 const BOIL_FRAMES = 6;
 function boilSeed(id) {
-  return id * 137.7 + Math.floor(frameCount / BOIL_FRAMES) * 11.3;
+  const frames = typeof Look !== 'undefined' ? Look.boilFrames() : BOIL_FRAMES;
+  return id * 137.7 + (frames === Infinity ? 0 : Math.floor(frameCount / frames)) * 11.3;
+}
+
+/* the 'line wobble' dial, scaling every hand-drawn wobble */
+function wobbleAmt() {
+  return typeof Look !== 'undefined' ? Look.v.wobble : 1;
 }
 
 /* Closed wobbly blob — the workhorse for every organic shape here. */
 function wobblyBlob(x, y, w, h, id, steps = 26, amp = 2.2) {
   const s = boilSeed(id);
+  amp *= wobbleAmt();
   const pts = [];
   for (let i = 0; i < steps; i++) {
     const a = (TWO_PI * i) / steps;
@@ -93,6 +83,7 @@ function wobblyBlob(x, y, w, h, id, steps = 26, amp = 2.2) {
 /* Same shape, but emitted straight into the 2D context so it can be a clip. */
 function blobPath(ctx, x, y, w, h, id, steps = 26, amp = 2.2) {
   const s = boilSeed(id);
+  amp *= wobbleAmt();
   ctx.beginPath();
   for (let i = 0; i <= steps; i++) {
     const a = (TWO_PI * i) / steps;
@@ -105,36 +96,6 @@ function blobPath(ctx, x, y, w, h, id, steps = 26, amp = 2.2) {
   ctx.closePath();
 }
 
-/* A wobbly stroke from a to b. */
-function wobblyLine(x1, y1, x2, y2, id, amp = 1.6, steps = 8) {
-  const s = boilSeed(id);
-  beginShape();
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const n = noise(s + t * 3, s + 40);
-    const off = (n - 0.5) * 2 * amp * Math.sin(t * PI);
-    const nx = -(y2 - y1), ny = x2 - x1;
-    const len = Math.hypot(nx, ny) || 1;
-    vertex(lerp(x1, x2, t) + (nx / len) * off, lerp(y1, y2, t) + (ny / len) * off);
-  }
-  endShape();
-}
-
-/* A darker version of a colour, for its own outline.
-
-   The reference art inks everything in navy, but a stark near-black line at full
-   weight makes every creature read as a sticker laid on the water. Mixing the
-   body colour toward a deep blue gives a line that still separates the shape
-   without shouting, and never goes actually black. */
-function shade(hex, amt = 0.5) {
-  if (typeof hex !== 'string' || hex[0] !== '#' || hex.length < 7) return PAL.ink;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const m = (c, t) => Math.round(c + (t - c) * amt);
-  return 'rgb(' + m(r, 26) + ',' + m(g, 48) + ',' + m(b, 82) + ')';
-}
-
 function ink(weight = 2.4, col = PAL.ink) {
   stroke(col);
   strokeWeight(weight);
@@ -142,42 +103,23 @@ function ink(weight = 2.4, col = PAL.ink) {
   strokeCap(ROUND);
 }
 
-/* ------------------------------------------------------------------ grain */
-
-function makeGrain(size = 220) {
-  const g = createGraphics(size, size);
-  g.loadPixels();
-  for (let i = 0; i < g.pixels.length; i += 4) {
-    const v = 128 + (Math.random() - 0.5) * 235;
-    g.pixels[i] = g.pixels[i + 1] = g.pixels[i + 2] = v;
-    g.pixels[i + 3] = 255;
-  }
-  g.updatePixels();
-  return g;
-}
-
-function drawGrain(g, alpha = 30, scale = 1.7) {
-  if (!g) return;
-  push();
-  blendMode(OVERLAY);
-  tint(255, alpha);
-  const s = g.width * scale;
-  for (let x = 0; x < width; x += s) {
-    for (let y = 0; y < height; y += s) image(g, x, y, s, s);
-  }
-  pop();
-  blendMode(BLEND);
-  noTint();
-}
-
 /* ------------------------------------------------------------- creatures */
+
+/* How much of its width the creature is showing. Turning around is animated
+   (aquarium.js), so this runs from +1 through nearly nothing to −1: a fish
+   mid-turn is edge-on and foreshortened, rather than mirrored between two
+   frames. It never reaches zero, or the animal would vanish. */
+function bodyFlip(f) {
+  const v = f.flip == null ? f.dir : f.flip;
+  return (v < 0 ? -1 : 1) * Math.max(0.16, Math.abs(v));
+}
 
 /* Anything in the tank that isn't you: body from the registry, drawn eye. */
 function drawCreature(f) {
   const sp = Creatures.get(f.species);
   push();
   translate(f.x, f.y);
-  if (sp.flips) scale(f.dir, 1);
+  if (sp.flips) scale(bodyFlip(f), 1);
   rotate(f.tilt + (f.spin || 0));
   Creatures.draw(f);
   Creatures.drawPlainEye(f);
@@ -197,7 +139,7 @@ function drawMyFish(f, parts) {
 
   push();
   translate(f.x, f.y);
-  if (sp.flips) scale(f.dir, 1);
+  if (sp.flips) scale(bodyFlip(f), 1);
   rotate(f.tilt + (f.spin || 0));
 
   if (f.lifeState === 'dead') {
@@ -207,7 +149,6 @@ function drawMyFish(f, parts) {
   }
 
   Creatures.draw(f);
-  if (f.fat) drawBellyBulge(f);
 
   const fish = f.fish == null ? 0.7 : f.fish;
   const e = Creatures.eyeSpot(f);
@@ -223,10 +164,16 @@ function drawMyFish(f, parts) {
     const { w } = Creatures.dims(f);
     const faceMul = sp.faceMul == null ? 1.12 : sp.faceMul;
     const d = w * faceMul * (1 + (f.talk || 0) * 0.06);
-    blit(parts.face, e.x, e.y, d);
+    const c = Creatures.faceSpot(f);
+    blit(parts.face, c.x, c.y, d);
   } else {
+    /* Which side the eye is on follows the drawn body, not the heading: the
+       turn takes a moment, and swapping the eye the instant the fish decides
+       to come about would move it across a face still pointing the old way.
+       Keyed off the flip, it changes at the one frame the fish is edge-on. */
+    const side = (f.flip == null ? f.dir : f.flip) > 0;
     const set = !parts ? null
-      : (f.dir > 0 ? (parts.right || parts.left) : (parts.left || parts.right));
+      : (side ? (parts.right || parts.left) : (parts.left || parts.right));
     if (set && set.eye) {
       blit(set.eye, e.x, e.y, e.d * (1.02 + 0.46 * fish) * (1 + (f.talk || 0) * 0.10));
     } else {
@@ -236,25 +183,16 @@ function drawMyFish(f, parts) {
   pop();
 }
 
-/* A puffed-up belly for a fish that's been fed past the fat threshold — a
-   soft bulge layered on top of the body, in the same colours, so it reads as
-   swollen rather than as a different creature. */
-function drawBellyBulge(f) {
-  const { w, h } = Creatures.dims(f);
-  noStroke();
-  ink(Math.max(0.8, f.line * 0.9), shade(f.col, 0.42));
-  fill(f.col);
-  wobblyBlob(-w * 0.02, h * 0.28, w * 0.62, h * 0.58, f.id + 500, 22, w * 0.02);
-}
+/* Being overfed is handled in creatures.js, by the animal's own outline: each
+   species puts the weight where that animal actually would, so the belly
+   band, the markings, the fins and the ink all move with it. A bulge drawn on
+   top here, as this used to do, read as a sticker on every species but one. */
 
 /* The fish, dead: its own body drawn in grey instead of its owner's colour,
    settled where it sank, with the eye replaced by a plain crossed-out dot —
    no face patch, no eye photo, since neither means anything any more. */
 function drawDeadBody(f) {
-  const oc = f.col, oa = f.accent, ol = f.lineCol;
-  f.col = DEAD.col; f.accent = DEAD.accent; f.lineCol = DEAD.line;
-  Creatures.draw(f);
-  f.col = oc; f.accent = oa; f.lineCol = ol;
+  Creatures.draw(f);                     // lifeState 'dead' paints it in grey
 
   const e = Creatures.eyeSpot(f);
   noStroke();

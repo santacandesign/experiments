@@ -15,7 +15,7 @@ to install.
      swims back and forth on purpose: turning is what shows the eye swapping sides.
    - **voice** — hold the button to record, hard 5-second cap, playback preview.
 2. **`aquarium.html`** — the tank. Your fish (face + name + voice) and two stand-in friends
-   swim in colour among scenery fish drawn into the dark water. **Tap your fish** and it plays your clip through the bubbly filter,
+   swim in front of a planted reef and a cast of scenery fish. **Tap your fish** and it plays your clip through the bubbly filter,
    wiggling and blowing bubbles in time with the audio.
 
 Everything is stored in `localStorage` under `fishfriends.myfish.v1`, so the fish survives
@@ -53,16 +53,19 @@ Vercel, GitHub Pages, S3 + CloudFront. No configuration needed.
 | `index.html` / `js/create.js` | the three-step flow, live viewfinder, face-centred capture |
 | `js/fishhead.js` | turning a detected face into a fish head — the wrap, the cut-out, the eye domes |
 | `js/facerig.mjs` | MediaPipe Face Landmarker, loaded as a module and published as `window.FaceRig` |
-| `aquarium.html` / `js/aquarium.js` | the tank: scene, swimmers, tap-to-talk |
+| `aquarium.html` / `js/aquarium.js` | the tank: the cast, swimming, tap-to-talk, the demo states |
+| `js/reef.js` | everything in the tank that isn't a creature: water, reef, planting, sand, light, bubbles |
+| `js/creatures.js` | every species: silhouette, fins, markings, where the eye goes |
+| `js/paint.js` | the dials (`Look`), colour maths (`Col`), fish colour schemes and shared textures (`Paint`) |
 | `js/samples.js` | the two stand-in friends and their painted eyes |
-| `js/shared.js` | palette, `localStorage` wrapper, hand-drawn drawing helpers |
+| `js/shared.js` | swatch colours, `localStorage` wrapper, line helpers, `drawMyFish` |
 | `js/voice.js` | `MediaRecorder` capture + the Web Audio "bubbly cartoon fish" chain |
 | `css/style.css` | the hand-drawn UI shell |
 
 ## How your creature is made
 
 Every creature in the tank, yours included, comes from one registry in
-`js/creatures.js`: seven species — **fish, long, round, tiny, seahorse, starfish, whale** —
+`js/creatures.js`: nine species — **fish, long, round, tiny, seahorse, starfish, whale, manta, shark** —
 each owning its proportions, silhouette, appendages, patterning and where an eye belongs.
 Picking your species is picking from the same list the scenery is drawn from.
 
@@ -81,11 +84,15 @@ against ~400KB.
   how far it bulges.
 - **Two are baked**, one from each half of the face. The tank draws whichever matches the
   swim direction, so the eye changes side when the creature turns around.
-- **Detail on every body**: banding, spots and belly patches; ribs across the fins and a
-  gill arc; a light top edge and a shadowed belly for roundness; fine speckle matching the
-  grain on the water. All of it clipped to the body path, which is why each species defines
-  its silhouette as a context path rather than a p5 shape — the same path fills it, inks it
-  and clips the patterning inside it.
+- **Detail on every body**: a belly band, a head cap behind a gill line with a cheek band,
+  markings (dashes, scale crescents, rings, spots), a wet gloss streak, a soft belly shade
+  and riso grain. All of it clipped to the body path, which is why each species defines its
+  silhouette as a context path rather than a p5 shape — the same path fills it, inks it and
+  clips the patterning inside it.
+- **The ordinary fish (fish, round, tiny) are built from a side profile**, not an oval: a
+  thickness curve `u^a·(1−u)^b` from nose to tail wrist, giving a rounded snout, a high
+  shoulder and a narrow wrist for the forked tail. Fins, belly, cap and markings all anchor
+  to that same curve, and the back half bends with the tail beat.
 - **The seahorse is built differently** from the rest. Instead of a closed outline it has a
   *centreline* — a list of `[x, y, halfWidth]` points walked from the snout, down the neck
   and body, then around a shrinking spiral for the tail — offset by its half-width to make
@@ -116,24 +123,33 @@ picking their own destination.
 - A starfish never mirrors — it has no front. A seahorse stays upright; leaning one over
   looks broken.
 
-## Colour means a person
+## Colour
 
-The tank is a dark petrol teal, and **only fish with a person behind them are in colour** —
-yours, and the two stand-in friends. Everything else — scenery fish, the whale, seahorses,
-starfish, planting, coral, bubbles, the jelly-ghosts, the confetti — is drawn in the water's
-own tones: bodies a step either side of the water (`SEA.skins`), inked in a teal a notch
-darker (`SEA.ink`), markings a step lighter (`SEA.marks`). That's how the turtles, coral and
-jellyfish in the reference sit in the water. A friend is the first thing you find in the
-tank, and that is the point.
+Every creature is in full, very saturated colour, as on the reference sheet — and **no
+creature is one colour**. A colour is a *scheme* (`Paint.SCHEMES` in `paint.js`): a body,
+a belly, a head cap, a cheek band, fins in a contrasting colour, markings and a gloss.
+The make-a-fish swatches are the eight scheme bodies; a stored fish keeps only its body
+hex and gets the accents back from there (an older save is matched to the nearest hue).
 
-Scenery creatures are marked `blend: true` and pass `lineCol` / `patCol`, which the creature
-registry uses for outlines, stripes and eyes. Leave those off and a creature draws in the
-bright palette, outlined in **a darkened version of its own colour** (`shade()` in
-`shared.js`).
+| scheme | body | belly | head | fins |
+|---|---|---|---|---|
+| ember | `#FF4A1C` | pink | pale pink | olive |
+| goldie | `#FF8A12` | cream | — | lilac |
+| sunny | `#FFC612` | orange | — | sky blue |
+| bubblegum | `#FF8FB8` | pale pink | — | green |
+| lagoon | `#0F8A4B` | sky blue | — | pink |
+| reef | `#10B4CC` | yellow | — | pink |
+| periwinkle | `#93A9FF` | pale blue | orange | green |
+| moss | `#8C9C14` | orange | lilac | periwinkle |
+
+Everything is inked in a warm near-black (`Paint.INK`). Scenery creatures are marked
+`blend: true` and given a `depth`: the further back, the smaller, thinner-inked and more
+hazed into the water. The **scenery colour** dial decides how far that goes — at 1 the
+scenery is as bright as your fish, at 0 it sinks into the water and only people stand out.
 
 ## The two stand-in friends
 
-`js/samples.js` — **maya** (coral, brown eyes) and **theo** (yellow round fish, green eyes).
+`js/samples.js` — **maya** (ember fish, brown eyes) and **theo** (goldie round fish, green eyes).
 There are no photos in the prototype, so each face is *painted* onto a canvas laid out like a
 real capture — skin with undertone, socket shadow, lid crease, brow hairs, lashes, sclera
 with veins and a caruncle, an iris with fibres, crypts and a limbal ring, a wet catchlight,
@@ -143,14 +159,38 @@ on every load. Tapping one gets a wiggle and bubbles; they have no voice.
 
 ## The look
 
-Water: `#0C2431` → `#133746` → `#1A4A59` → `#215766`, with a faint moonlit pool at the
-surface, a dark vignette and baked doodle confetti (rings, dots, asterisks, stars, spirals).
-Fish colours, for people only: coral `#E8452E`, orange `#F5883E`, yellow `#F6D046`,
-blush `#F4A9C0`, lime `#C7E86B`, teal `#3FB6C4`, with cream `#F7F0E4` name tags.
+Flat, saturated, inked — the reference sheet — on a bright reef. `js/reef.js` draws the
+tank back to front: turquoise water lit from above (`#3FCAD6` → `#139DB6` → `#0B6A8E` at
+the defaults) with a sun pool and wavering surface lines; two hazy layers of far reef;
+distant shoals; hazed mid planting; warm sand with ripples, pebbles, shells, rocks, branching
+and brain corals and sea fans; then caustics and light shafts. In front of the scenery fish:
+inked seagrass, kelp with floats, ruffled sea lettuce, red sea whips and anemones, all
+swaying. Tall planting goes to the sides and low planting to the middle, so there's always
+open water. Distance is done the illustrator's way: further things are paler and bluer, and
+lose their ink.
 
-Outlines are redrawn with a new wobble seed every 6 frames (`BOIL_FRAMES` in `shared.js`),
-which gives the ~10fps shimmer hand-inked animation has. Grain is a generated noise
-texture composited in `OVERLAY`, over a speckled gradient, under a soft vignette.
+The layout is seeded, so a colour dial rebakes the same reef rather than reshuffling it;
+only the density dials replant. Plant heights are capped by screen width so a tall phone
+doesn't grow a forest up to the middle of the tank.
+
+Outlines are redrawn with a new wobble seed every few frames (the **line boil** dial),
+which gives the shimmer hand-inked animation has.
+
+## The dials
+
+Tap **🎛 dials** in the tank. Groups:
+
+- **water** — hue, depth, saturation, distance haze, light shafts, caustics, bubbles,
+  floating specks, vignette, paper grain
+- **plants** — density, hue, saturation, red stems, sway, sand warmth
+- **fish** — saturation, brightness, outline weight and darkness, markings, gloss, fin
+  rays, shading, riso texture, line wobble, line boil
+- **tank** — scenery colour, number of scenery fish, distant shoals, fish size, swim speed
+
+Presets: **reference** (the defaults), **neon**, **pastel**, **storybook**, **clean**,
+**deep**. Values persist in `localStorage` under `fishfriends.look.v2`, and the make-a-fish
+preview reads the same ones. **copy values** puts the current set on the clipboard so a look
+can be baked in as the new `def`s in `Look.DIALS`. Double-click a dial to reset it.
 
 ## The fish head
 

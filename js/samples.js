@@ -21,10 +21,10 @@ const SampleFriends = (() => {
      eyes bulged (`bulge` 0..1). One of each here so the tank shows both cuts
      living side by side. */
   const FRIENDS = [
-    { name: 'maya', species: 'fish', col: PAL.coral,  accent: PAL.orange, fish: 0.72, seed: 7,
+    { name: 'maya', species: 'fish', col: BODY_COLOURS[0], fish: 0.72, seed: 7,
       mode: 'eye',
       skin: [172, 116, 86],  iris: [98, 60, 28],   rim: [34, 19, 10], hair: [30, 20, 15] },
-    { name: 'theo', species: 'deep', col: PAL.yellow, accent: PAL.orange, fish: 0.60, seed: 19,
+    { name: 'theo', species: 'deep', col: BODY_COLOURS[1], fish: 0.60, seed: 19,
       mode: 'face', bulge: 0.7,
       skin: [230, 188, 160], iris: [92, 132, 116], rim: [28, 52, 48], hair: [96, 66, 42] }
   ];

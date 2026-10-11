@@ -448,7 +448,7 @@ document.getElementById('release').addEventListener('click', () => {
 /* ------------------------------------------------- live fish preview (p5) */
 
 const previewFish = {
-  x: 0, y: 0, w: 118, dir: 1, tilt: 0, spin: 0, id: 4,
+  x: 0, y: 0, w: 118, dir: 1, flip: 1, tilt: 0, spin: 0, id: 4,
   species: 'fish', col: draft.col, accent: draft.col, line: 1.0,
   wagSpeed: 0.20, phase: 0, talk: 0, fish: 0.65, effort: 1, wave: 0, coil: 1
 };
@@ -491,6 +491,8 @@ function draw() {
   const amp = Math.max(0, width / 2 - previewFish.w * sp.sizeMul * 0.8);
   previewFish.x = width / 2 + Math.sin(t) * amp;
   previewFish.dir = Math.cos(t) >= 0 ? 1 : -1;
+  /* turn through edge-on rather than mirroring in one frame, as in the tank */
+  previewFish.flip += constrain(previewFish.dir - previewFish.flip, -0.12, 0.12);
   previewFish.tilt = Math.sin(frameCount * 0.02) * 0.06;
   previewFish.col = previewFish.accent = draft.col;
   previewFish.species = species;
